@@ -15,7 +15,7 @@ LOGGER.setLevel(logging.DEBUG)
 
 FORMATTER = logging.Formatter('%(asctime)s - Line %(lineno)d - %(message)s')
 
-MAXMEMLIMIT = 9223372036854771712
+MAXMEMLIMIT = 9223372036854775807  # 2^63 - 1, max value for signed 64-bit
 totalram_pages = 0
 
 # cgroup v2 常量
