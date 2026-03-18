@@ -478,6 +478,7 @@ def detect_report_only(output_dir):
 def detect_cgroup_path():
     """Auto-detect the best cgroup path to reclaim."""
     candidates = [
+        os.path.join(CGROUP_V2_ROOT, 'kubepods.slice'),
         os.path.join(CGROUP_V2_ROOT, 'kubepods'),
         os.path.join(CGROUP_V2_ROOT, 'kubepods', 'burstable'),
         os.path.join(CGROUP_V2_ROOT, 'system.slice'),
