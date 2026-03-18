@@ -37,7 +37,7 @@ class UMRD:
         self.cpu_cgroup = cpu_cgroup = ''
         try:
             cpu_cgroup = proc_cgroup_info['cpu']
-            self.cpu_cgroup = 'CGROUP_CPU_PATH/' + cpu_cgroup
+            self.cpu_cgroup = os.path.join(CGROUP_CPU_PATH, cpu_cgroup)
         except KeyError:
             LOGGER.error('umrd process cgroup has no cpu cgroup information: %s', proc_cgroup_info)
         self.mem_cgroup = mem_cgpath = ''
@@ -121,10 +121,21 @@ class UMRD:
         ret = {}
         for line in data:
             infos = line.split(b':')
-            if infos[1] == b'cpu,cpuacct':
-                ret['cpu'] = infos[2].decode('utf-8').rstrip('/')
-            elif infos[1] == b'memory':
-                ret['mem'] = infos[2].decode('utf-8').rstrip('/')
+            ctrler = infos[1]
+            path = infos[2].decode('utf-8').rstrip('/')
+            
+            # cgroup v2: single unified hierarchy, format is "0::/path"
+            # ctrler is empty in cgroup v2
+            if not ctrler or ctrler == b'0':
+                ret['cpu'] = path.lstrip('/')
+                ret['mem'] = path.lstrip('/')
+                continue
+            
+            # cgroup v1: multiple hierarchies
+            if b'cpu' in ctrler:
+                ret['cpu'] = path.lstrip('/')
+            elif ctrler == b'memory':
+                ret['mem'] = path.lstrip('/')
         return ret
 
     def cpu_offline_condition(self):
@@ -166,7 +177,7 @@ class UMRD:
             LOGGER.info('Failed to clean %s/cpu.offline for : %s', self.cpu_cgroup, exp)
 
         try:
-            with open('CGROUP_CPU_PATH/cgroup.procs', 'wb') as _f:
+            with open(os.path.join(CGROUP_CPU_PATH, 'cgroup.procs'), 'wb') as _f:
                 _f.write(str(self.pid).encode('ascii'))
         except:
             LOGGER.info('Failed to migrate umrd process to cpu root cgroup.')
@@ -470,39 +481,18 @@ class UMRD:
             compr_ratio = 0
         else:
             compr_ratio = zram_compr / zram_orig
-        mem_limit = mem_total
-        anon_save = zram_orig - zram_compr
-        memsw_usage, file_save = 0, 0
-        memsw_usage = cg_memory_current(CGROUP_V2_ROOT)
-        swap_current = 0
-        if cg_has_interface(CGROUP_V2_ROOT, 'memory.swap.current'):
-            try:
-                with open(os.path.join(CGROUP_V2_ROOT, 'memory.swap.current'), 'r') as f:
-                    swap_current = int(f.read().strip())
-            except:
-                pass
-        memsw_usage += swap_current
-        if self.cgtree.conf.has_cgroup_zram_stat:
-            if self.cgtree.conf.use_emm_zram and cg_has_interface(CGROUP_V2_ROOT, 'memory.emm.workingset'):
-                ret = parse_textinfo(os.path.join(CGROUP_V2_ROOT, 'memory.emm.workingset'))
-            else:
-                ret = cg_memory_stat(CGROUP_V2_ROOT)
-            val = int(ret.get(b'workingset_refault_distance_avg_10m', 0)) + \
-                    int(ret.get(b'workingset_valid_eviction_avg_10m', 0))
-            file_save = val * 4096 / 2
 
-        file_save_limit = mem_limit - anon_save
-        if file_save > file_save_limit:
-            LOGGER.debug('[DEBUG] file_save(%s) larger than file_save_limit(%s)',
-                            file_save, file_save_limit)
-        file_save = max(0, min(file_save, file_save_limit))
+        mem_limit, memsw_usage, anon_save, file_save = 0, 0, 0, 0
+        for memcg in self.cgtree.roots.values():
+            (cg_mem_limit, cg_msw_usage,
+                cg_anon_save, cg_file_save) = memcg.get_memsaving_recursive(compr_ratio)
+            mem_limit += cg_mem_limit
+            memsw_usage += cg_msw_usage
+            anon_save += cg_anon_save
+            file_save += cg_file_save
+        mem_limit = min(mem_limit, mem_total) or mem_total
 
-        # max_memusage is the estimation of memory used before umrd reclaiming
-        # It should be equal to `anon_save + file_save + memory_usage + zram_compr`
-        # anon_save + memory_usage + zram_compr == memory_usage + zram_orig = memsw_usage
-        # memsw_usage is the sum of cgtree.root cgroups' memsw_usage
         max_memusage = file_save + memsw_usage
-
         save_ratio = (anon_save + file_save) / (max_memusage or 1) * 100
 
         # write global_memsave
@@ -513,7 +503,6 @@ class UMRD:
             _f.write('file save: %d bytes\n' % file_save)
             _f.write('max memusage: %d bytes\n' % max_memusage)
             _f.write('save ratio: %.2f %%\n' % save_ratio)
-
             _f.write('savepage limit: %d bytes\n' % mem_limit)
             _f.write('totalused memory: %d bytes\n' % mem_used)
 

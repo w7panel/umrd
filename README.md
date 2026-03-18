@@ -54,7 +54,7 @@ pip install umrd
 ### 方式2: wheel文件
 
 ```bash
-pip install umrd-1.0.0-py3-none-any.whl
+pip install umrd-2.0.0-py3-none-any.whl
 sudo umrd-install --enable
 ```
 

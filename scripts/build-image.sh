@@ -5,7 +5,7 @@
 
 set -e
 
-VERSION=${1:-1.0.0}
+VERSION=${1:-2.0.0}
 REGISTRY=${REGISTRY:-docker.io}
 IMAGE_NAME=${IMAGE_NAME:-w7panel/umrd}
 CTNR_NAME="umrd-build"

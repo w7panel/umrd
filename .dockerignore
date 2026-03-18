@@ -6,12 +6,14 @@
 *.md
 !README.md
 dist/
+!dist/*.whl
 build/
 *.egg-info/
 tests/
 scripts/
 examples/
 service/
+!service/umrd.service
 k8s/
 pyproject.toml
 requirements*.txt

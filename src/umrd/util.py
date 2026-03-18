@@ -852,8 +852,7 @@ def remodprobe_default_zram(comp_alg=None):
 
     LOGGER.debug('  >>> modprobe zram num_devices=1')
     if os.system('modprobe zram num_devices=1'):
-        LOGGER.info('cannot set zram num_devices to 1')
-        sys.exit(1)
+        LOGGER.warning('cannot modprobe zram, zram may not be available')
 
 def remodprobe_emm_zram(comp_alg=None):
     LOGGER.debug('Resetting zram...')
@@ -861,8 +860,7 @@ def remodprobe_emm_zram(comp_alg=None):
     if os.system('modprobe -r emm_zram'):
         LOGGER.info('cannot remove emm_zram')
     if os.system('modprobe emm_zram'):
-        LOGGER.info('cannot modprobe emm_zram')
-        sys.exit(1)
+        LOGGER.warning('cannot modprobe emm_zram, zram may not be available')
 
 def check_loop_dev(disk_path):
     '''
@@ -992,21 +990,27 @@ def ensure_zram(comp_alg=None, use_emm_zram=False,
         memtotal += disk_size * 1024
 
     memtotal = '%sK' % memtotal
+    if not os.path.exists('/sys/block/zram0'):
+        LOGGER.warning('zram module not loaded, skipping zram setup')
+        return
+
     LOGGER.debug('  >>> echo %s > /sys/block/zram0/disksize', memtotal)
     with open('/sys/block/zram0/disksize', 'wb') as _f:
-        _f.write(memtotal.encode('ascii'))
+        _f.write(str(memtotal).encode('ascii'))
     time.sleep(2)
 
     if os.system('mkswap /dev/zram0'):
-        sys.exit(1)
+        LOGGER.warning('mkswap /dev/zram0 failed, skipping zram swap setup')
+        return
     os.system('swapon --version')
     os.system('swapon -s')
     if os.system('swapon -p 10 /dev/zram0'):
-        sys.exit(1)
+        LOGGER.warning('swapon /dev/zram0 failed')
+        return
 
     if check_zram():
         return
-    sys.exit(1)
+    LOGGER.warning('zram setup incomplete, continuing without zram')
 
 
 def close_zram(conf: argparse.Namespace):
