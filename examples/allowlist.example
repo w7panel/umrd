@@ -1,0 +1,18 @@
+# Example allowlist configuration for UMRD
+# 
+# Format: one cgroup path per line
+# Each line can optionally contain reclaim parameters after the path
+#
+# Example:
+#   /sys/fs/cgroup/memory/kubepods/burstable
+#   /sys/fs/cgroup/memory/kubepods/besteffort
+#   /sys/fs/cgroup/memory/kubepods/guaranteed
+#
+# With custom parameters:
+#   /sys/fs/cgroup/memory/your-cgroup interval_anon=5 ratio_anon=0.002 interval_file=10 ratio_file=0.0002
+
+# Default configuration for Kubernetes pods
+/sys/fs/cgroup/memory/kubepods
+
+# For EMM mode with custom parameters:
+# /sys/fs/cgroup/memory/kubepods interval_anon=5 ratio_anon=0.002 interval_file=10 ratio_file=0.0002

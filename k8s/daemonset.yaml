@@ -1,0 +1,101 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: umrd-system
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: umrd
+  namespace: umrd-system
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: umrd
+  namespace: umrd-system
+  labels:
+    app: umrd
+spec:
+  selector:
+    matchLabels:
+      app: umrd
+  template:
+    metadata:
+      labels:
+        app: umrd
+    spec:
+      serviceAccountName: umrd
+      hostPID: true
+      priorityClassName: system-node-critical
+      tolerations:
+      - operator: Exists
+      containers:
+      - name: umrd
+        image: w7panel/umrd:latest
+        imagePullPolicy: IfNotPresent
+        command: ["python3", "-m", "umrd"]
+        args:
+        - "--mode=2"
+        - "--allowlist=/config/allowlist.cfg"
+        - "--standalone-cgroup"
+        - "--swapout-limit=0.6"
+        - "--pct-trigger-reclaim=0.6"
+        - "--cpu-quota-ratio=0.05"
+        - "--reclaim-mode=emm"
+        - "--interval-anon=10"
+        - "--ratio-anon=0.0002"
+        - "--ratio-file=0"
+        - "--open-zram"
+        - "--quiet"
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: DISK_SIZE
+          value: "0"
+        - name: ZRAM_REJECT_SIZE
+          value: "-1"
+        securityContext:
+          privileged: true
+        resources:
+          requests:
+            cpu: 100m
+            memory: 64Mi
+          limits:
+            cpu: 500m
+            memory: 256Mi
+        volumeMounts:
+        - name: cgroup
+          mountPath: /sys/fs/cgroup
+        - name: config
+          mountPath: /config
+        - name: run
+          mountPath: /run/umrd
+        - name: kernel-modules
+          mountPath: /lib/modules
+          readOnly: true
+      volumes:
+      - name: cgroup
+        hostPath:
+          path: /sys/fs/cgroup
+      - name: config
+        configMap:
+          name: umrd-config
+      - name: run
+        hostPath:
+          path: /run/umrd
+      - name: kernel-modules
+        hostPath:
+          path: /lib/modules
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: umrd-config
+  namespace: umrd-system
+data:
+  allowlist.cfg: |
+    /sys/fs/cgroup/memory/kubepods
+  blocklist.cfg: |
+    /sys/fs/cgroup/memory/umrd
+    /sys/fs/cgroup/memory/system.slice

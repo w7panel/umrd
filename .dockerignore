@@ -1,0 +1,19 @@
+# .dockerignore
+.git
+.gitignore
+.sisyphus
+.env
+*.md
+!README.md
+dist/
+build/
+*.egg-info/
+tests/
+scripts/
+examples/
+service/
+k8s/
+pyproject.toml
+requirements*.txt
+Dockerfile
+Makefile

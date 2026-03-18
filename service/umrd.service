@@ -1,0 +1,35 @@
+[Unit]
+Description=Userspace Memory Reclaim Daemon
+Documentation=https://github.com/w7panel/umrd
+ConditionPathExists=/proc/pressure
+
+[Service]
+Type=simple
+Environment="PYTHONUNBUFFERED=1"
+EnvironmentFile=-/etc/umrd/umrd.env
+ExecStartPre=/usr/bin/mkdir -p /run/umrd
+ExecStart=/usr/bin/python3 -m umrd \
+    --standalone-cgroup \
+    --swapout-limit=0.6 \
+    --pct-trigger-reclaim=0.6 \
+    --cpu-quota-ratio=0.05 \
+    --scan-interval=5 \
+    --mode=2 \
+    --swappiness=60 \
+    --reclaim-mode=emm \
+    --interval-anon=10 \
+    --ratio-anon=0.0002 \
+    --ratio-file=0 \
+    --open-zram \
+    --quiet \
+    --logfile=/run/umrd/umrd.log
+Restart=on-failure
+RestartSec=5
+KillSignal=SIGINT
+ExecStopPost=/bin/echo "UMRD stopped"
+TimeoutStopSec=3
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
