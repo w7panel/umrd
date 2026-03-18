@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "umrd"
-version = "1.0.0"
+version = "2.0.0"
 description = "Userspace Memory Reclaimer Daemon"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -37,11 +37,6 @@ dev = [
 
 [project.scripts]
 umrd = "umrd.cli:main"
-
-[project.urls]
-Homepage = "https://github.com/w7panel/umrd"
-Documentation = "https://github.com/w7panel/umrd#readme"
-Repository = "https://github.com/w7panel/umrd"
 
 [project.urls]
 Homepage = "https://github.com/w7panel/umrd"

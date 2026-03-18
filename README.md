@@ -1,6 +1,6 @@
 # UMRD - Userspace Memory Reclaimer Daemon
 
-**版本**: 1.0.0  
+**版本**: 2.0.0  
 **License**: Apache-2.0
 
 ---
@@ -54,7 +54,7 @@ pip install umrd
 ### 方式2: wheel文件
 
 ```bash
-pip install umrd-1.8.0.eks-12-py3-none-any.whl
+pip install umrd-1.0.0-py3-none-any.whl
 sudo umrd-install --enable
 ```
 
@@ -67,7 +67,7 @@ pip install .
 sudo umrd-install --enable
 ```
 
-### 方式4: Kubernetes
+### 方式3: Kubernetes
 
 ```bash
 kubectl apply -f k8s/daemonset.yaml
@@ -279,16 +279,17 @@ def _cal_reclaim_target(self):
 
 ## 6. 内核接口
 
-### 6.1 内存接口
+### 6.1 内存接口 (cgroup v2)
 
 | 接口 | 用途 |
 |------|------|
-| `/sys/fs/cgroup/memory/*/memory.pressure` | PSI内存压力 |
-| `/sys/fs/cgroup/memory/*/memory.reclaim` | Simple模式回收 |
-| `/sys/fs/cgroup/memory/*/memory.emm.age` | EMM页面老化 |
-| `/sys/fs/cgroup/memory/*/memory.emm.reclaim` | EMM精细回收 |
-| `/sys/fs/cgroup/memory/*/memory.stat` | 内存统计 |
-| `/sys/fs/cgroup/memory/*/memory.memsw.usage_in_bytes` | 内存+swap使用量 |
+| `/sys/fs/cgroup/*/memory.pressure` | PSI内存压力 |
+| `/sys/fs/cgroup/*/memory.reclaim` | Simple模式回收 |
+| `/sys/fs/cgroup/*/memory.emm.age` | EMM页面老化 |
+| `/sys/fs/cgroup/*/memory.emm.reclaim` | EMM精细回收 |
+| `/sys/fs/cgroup/*/memory.stat` | 内存统计 |
+| `/sys/fs/cgroup/*/memory.current` | 当前内存使用量 |
+| `/sys/fs/cgroup/*/memory.swap.current` | 当前swap使用量 |
 
 ### 6.2 系统接口
 
@@ -367,7 +368,7 @@ ExecStart=/usr/bin/python3 -m umrd \
 ### 9.1 Allowlist
 
 ```
-/sys/fs/cgroup/memory/kubepods/burstable
+/sys/fs/cgroup/kubepods/burstable
     interval_anon=5 ratio_anon=0.002
     interval_file=10 ratio_file=0.0002
 ```
@@ -396,10 +397,10 @@ open_zram=1
 | 特性 | 路径 | 必须 |
 |------|------|------|
 | PSI | /proc/pressure/* | 是 |
-| cgroup v1 | /sys/fs/cgroup/memory/ | 是 |
+| cgroup v2 | /sys/fs/cgroup/ | 是 |
 | ZRAM | /sys/block/zram0/* | 否 |
 | LRU Gen | /sys/kernel/mm/lru_gen/* | 否 |
-| EMM | /sys/fs/cgroup/memory/*/memory.emm.* | 否 |
+| EMM | /sys/fs/cgroup/*/memory.emm.* | 否 |
 
 ---
 

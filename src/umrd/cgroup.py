@@ -8,6 +8,9 @@ from typing import List
 from .util import ALLOWED, ANON_ONLY, FILE_ONLY, PAGESIZE, MAXMEMLIMIT
 from .util import LOGGER, RuleItem, parse_textinfo, ReclaimParams, ReclaimStat
 from .util import get_totalram_pages, get_zram, get_curr_time
+from .util import cg_memory_current, cg_memory_max, cg_memory_stat
+from .util import cg_has_interface, cg_write_value, cg_try_reclaim
+from .util import cg_set_zram_priority, cg_get_zram_stat, cg_has_emm, cg_set_swappiness
 
 
 def create_cgroup(tree, path: str, rule: RuleItem, params: ReclaimParams, is_cgroot: bool):
@@ -62,27 +65,26 @@ class CgroupStat:
 
     def update_stat(self):
         try:
-            with open(self.path + '/memory.limit_in_bytes', 'rb') as _f:
-                memtotal = int(_f.readline())
-                if memtotal == MAXMEMLIMIT:
-                    self.memtotal = get_totalram_pages()
-                else:
-                    self.memtotal = memtotal
-            # update_usage read current from memory.usage_in_bytes
+            memtotal = cg_memory_max(self.path)
+            if memtotal == MAXMEMLIMIT:
+                self.memtotal = get_totalram_pages()
+            else:
+                self.memtotal = memtotal
+            self.current = cg_memory_current(self.path)
             self.memfree = self.memtotal - self.current
         except:
             pass
 
-        ret = parse_textinfo(self.path + '/memory.stat')
+        ret = cg_memory_stat(self.path)
         try:
-            self.total_active_anon = int(ret[b'total_active_anon'])
-            self.total_inactive_anon = int(ret[b'total_inactive_anon'])
-            self.total_active_file = int(ret[b'total_active_file'])
-            self.total_inactive_file = int(ret[b'total_inactive_file'])
-            self.active_anon = int(ret[b'active_anon'])
-            self.inactive_anon = int(ret[b'inactive_anon'])
-            self.active_file = int(ret[b'active_file'])
-            self.inactive_file = int(ret[b'inactive_file'])
+            self.total_active_anon = int(ret.get(b'active_anon', 0))
+            self.total_inactive_anon = int(ret.get(b'inactive_anon', 0))
+            self.total_active_file = int(ret.get(b'active_file', 0))
+            self.total_inactive_file = int(ret.get(b'inactive_file', 0))
+            self.active_anon = self.total_active_anon
+            self.inactive_anon = self.total_inactive_anon
+            self.active_file = self.total_active_file
+            self.inactive_file = self.total_inactive_file
             self.cur_total_lru = self.active_anon + self.inactive_anon + \
                                     self.active_file + self.inactive_file
         except:
@@ -91,12 +93,20 @@ class CgroupStat:
         return ret
 
     def update_lru_gen(self):
+        lru_gen_path = os.path.join(self.path, 'memory.emm.lru_gen')
+        if not os.path.exists(lru_gen_path):
+            self.emm_anon_cold = self.total_inactive_anon
+            self.emm_anon_total = self.total_inactive_anon + self.total_active_anon
+            self.emm_file_cold = self.total_inactive_file
+            self.emm_file_total = self.total_inactive_file + self.total_active_file
+            return
+
         total_anon = 0
         total_file = 0
         total_anon_cold = 0
         total_file_cold = 0
         try:
-            with open(self.path + '/memory.emm.lru_gen', 'rb') as _f:
+            with open(lru_gen_path, 'rb') as _f:
                 list_mglru = _f.readlines()
                 min_seq_idx_list = []
                 len_list_mglru = len(list_mglru)
@@ -110,11 +120,8 @@ class CgroupStat:
                 for index in range(cnt_node):
                     curr_min_gen_idx = min_seq_idx_list[index]
                     max_seq_idx = min_seq_idx_list[index + 1] - 2
-                    # max_seq_idx and max_seq_idx-1 are active in lru_gen_is_active
                     if max_seq_idx - curr_min_gen_idx <= 1:
                         continue
-                    # [curr_min_gen_idx, max_seq_idx-2] is the inactive
-                    # find the last non-zero
                     anon_cold = 0
                     file_cold = 0
                     for i in range(curr_min_gen_idx, max_seq_idx-1):
@@ -133,7 +140,6 @@ class CgroupStat:
                         total_anon += int(str_line[-2])
                         total_file += int(str_line[-1])
         except:
-            # emm mode will use these items to calculate how much to reclaim
             self.emm_anon_cold = self.total_inactive_anon
             self.emm_anon_total = self.total_inactive_anon + self.total_active_anon
             self.emm_file_cold = self.total_inactive_file
@@ -149,24 +155,29 @@ class CgroupStat:
         self.compr_ratio = root_compr_ratio
 
     def update_usage(self):
+        swap_current = 0
         try:
             if not self.is_cgroot:
-                with open(self.path + '/memory.usage_in_bytes', 'rb') as _f:
-                    self.current = int(_f.readline())
+                self.current = cg_memory_current(self.path)
             else:
                 ret = parse_textinfo('/proc/meminfo')
                 self.current = int(ret[b'MemTotal:']) * 1024 - int(ret[b'MemFree:']) * 1024
 
-            with open(self.path + '/memory.memsw.usage_in_bytes', 'rb') as _f:
-                self.memsw_usage = int(_f.readline())
+            try:
+                if cg_has_interface(self.path, 'memory.swap.current'):
+                    with open(os.path.join(self.path, 'memory.swap.current'), 'r') as f:
+                        swap_current = int(f.read().strip())
+            except:
+                pass
+
+            self.memsw_usage = self.current + swap_current
 
         except Exception:
             self.current = 0
             self.memsw_usage = 0
             LOGGER.info('%s CgroupStat update_usage failed', self.path)
 
-        # eks kernel >= 0017.10, current = file_in_mem + anon_in_mem + anon_compressed
-        self.swapout = int(max(0, self.memsw_usage - self.current) / ((1 - self.compr_ratio) or 1))
+        self.swapout = int(max(0, swap_current) / ((1 - self.compr_ratio) or 1))
 
     def update_anon_save(self):
         self.anon_save = max(0, self.memsw_usage - self.current)
@@ -275,11 +286,9 @@ class CgroupZramStat(CgroupStat):
 
         try:
             if not self.is_cgroot:
-                with open(self.path + '/memory.zram.raw_in_bytes', 'rb') as _f:
-                    self.zram_raw_in_bytes = int(_f.readline())
-
-                with open(self.path + '/memory.zram.usage_in_bytes', 'rb') as _f:
-                    self.zram_usage_in_bytes = int(_f.readline())
+                zram_stat = cg_get_zram_stat(self.path)
+                self.zram_raw_in_bytes = zram_stat.get('raw', 0)
+                self.zram_usage_in_bytes = zram_stat.get('usage', 0)
             else:
                 zram_orig, zram_compr = get_zram()
                 self.zram_raw_in_bytes = zram_orig
@@ -387,11 +396,7 @@ class BasicCgroup(CGroup):
 
     def set_swappiness(self, swappiness: int):
         self.swappiness = swappiness
-        try:
-            with open(self.path + '/memory.swappiness', 'wb') as _f:
-                _f.write(str(swappiness).encode('ascii'))
-        except:
-            LOGGER.info('%s set_swappiness failed', self.path)
+        cg_set_swappiness(self.path, swappiness)
 
     def set_zram_priority(self, zram_priority: int):
         if not self.tree.conf.has_cgroup_zram_stat:
@@ -401,11 +406,9 @@ class BasicCgroup(CGroup):
         if zram_priority < -4 or zram_priority > 4:
             LOGGER.info('%s invalid zram_priority %s', self.path, zram_priority)
             return
-        try:
-            with open(self.path + '/memory.zram.priority', 'wb') as _f:
-                _f.write(str(zram_priority).encode('ascii'))
-        except:
-            LOGGER.info('%s set_zram_priority failed', self.path)
+        # cgroup v2: use helper function to check and write
+        if cg_set_zram_priority(self.path, zram_priority):
+            LOGGER.debug('set_zram_priority=%s %s', zram_priority, self.path)
         if zram_priority < 0:
             return
         for child in self.children.values():
@@ -552,25 +555,13 @@ class SimpleCgroup(BasicCgroup):
 
     # Cgroupfs IO
     def do_reclaim(self, reclaim_mem: int):
-        try:
-            with open(self.path + '/memory.reclaim', 'wb') as _f:
-                _f.write(('%sK' % reclaim_mem).encode('ascii'))
-        except BlockingIOError:
-            # This is a very common error when pages are hot, don't be verbose, print as debug
-            LOGGER.debug('[do_reclaim] %s unable to reclaim too much: %dK', self.path, reclaim_mem)
-            return 0
-        except FileNotFoundError:
-            LOGGER.info('%s file not found', self.path)
-            return 0
-        except PermissionError:
-            LOGGER.critical('%s permission denied. reclaim_mem = %dK', self.path, reclaim_mem)
-            sys.exit(1)
-        except Exception as exp:
-            LOGGER.info('%s skip reclaim for %s', self.path, exp)
-            return 0
-
-        LOGGER.debug('reclaim=%sK %s', reclaim_mem, self.path)
-        return reclaim_mem
+        target_bytes = reclaim_mem * 1024
+        if cg_try_reclaim(self.path, target_bytes):
+            LOGGER.debug('reclaim=%sK %s', reclaim_mem, self.path)
+            return reclaim_mem
+        
+        LOGGER.debug('[do_reclaim] %s no memory.reclaim interface or failed', self.path)
+        return 0
 
     def refresh_statistic(self, curr_time):
         """
@@ -580,7 +571,7 @@ class SimpleCgroup(BasicCgroup):
             return
         self.last_scan_time = curr_time
         try:
-            psi_fd = os.open(self.path + '/memory.pressure', os.O_RDONLY, 0o400)
+            psi_fd = os.open(os.path.join(self.path, 'memory.pressure'), os.O_RDONLY, 0o400)
             some = os.read(psi_fd, 128).splitlines()[0].replace(b'=', b' ').split()
             os.close(psi_fd)
             self.total_history.append(int(some[8]))
@@ -722,35 +713,33 @@ class EMMCgroup(SimpleCgroup):
         self.age_history = 0
 
     def do_emm_age(self, swappiness: int = AGE_BOTH):
-        """
-        For MGLRU:
-        size is a indicator of if we are doing a partial pagetable walk.
-        0 means don't age if possible.
-        > 1 means do a partial page table walk, suitable for regular aging
-        max means do a full page table walk, slow but accurate.
+        emm_age_path = os.path.join(self.path, 'memory.emm.age')
+        if not os.path.exists(emm_age_path):
+            LOGGER.debug('%s memory.emm.age not available', self.path)
+            return
 
-        For LRU:
-        size is how much memory need to get deactivated.
-        """
         string = 'max %d' % (swappiness)
         try:
             LOGGER.info('Trying to age %s with (%s)', self.path, string)
-            with open(self.path + '/memory.emm.age', 'wb') as _f:
-                _f.write(string.encode('ascii'))
-            # reset last_scan_time to make sure cgroup update stat after age
+            with open(emm_age_path, 'w') as _f:
+                _f.write(string)
             self.last_scan_time = 0
         except Exception as ex:
             LOGGER.info('%s unable to age %s: %s', self.path, string, ex)
 
     def do_emm_reclaim(self, size: int, swappiness: int = 100):
+        emm_reclaim_path = os.path.join(self.path, 'memory.emm.reclaim')
+        if not os.path.exists(emm_reclaim_path):
+            LOGGER.debug('%s memory.emm.reclaim not available', self.path)
+            self.need_age = True
+            return 0
+
         string = '%dK %d' % (size, swappiness)
         try:
-            with open(self.path + '/memory.emm.reclaim', 'wb') as _f:
-                _f.write(string.encode('ascii'))
+            with open(emm_reclaim_path, 'w') as _f:
+                _f.write(string)
         except BlockingIOError:
-            # This is a very common error when pages are hot, don't be verbose, print as debug
             LOGGER.debug('[do_emm_reclaim] %s unable to reclaim too much: %s', self.path, string)
-            # We need to age due lack of inactive memory
             self.need_age = True
         except FileNotFoundError:
             LOGGER.info('%s file not found', self.path)

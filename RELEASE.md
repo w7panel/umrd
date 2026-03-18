@@ -87,7 +87,7 @@ sudo systemctl enable --now umrd
 sudo pip install umrd
 sudo cp service/umrd.service /etc/systemd/system/
 sudo systemctl daemon-reload
-echo "/sys/fs/cgroup/memory/kubepods" | sudo tee /run/umrd/allowlist.cfg
+echo "/sys/fs/cgroup/kubepods" | sudo tee /run/umrd/allowlist.cfg
 sudo systemctl enable --now umrd
 ```
 
@@ -147,5 +147,5 @@ metadata:
   namespace: kube-system
 data:
   allowlist.cfg: |
-    /sys/fs/cgroup/memory/kubepods
+    /sys/fs/cgroup/kubepods
 ```

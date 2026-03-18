@@ -5,19 +5,24 @@
 
 set -e
 
-VERSION=$(grep '^version = ' pyproject.toml | cut -d'"' -f2)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
+VERSION=$(grep '^version = ' "$PROJECT_DIR/pyproject.toml" | cut -d'"' -f2)
 REGISTRY=${REGISTRY:-docker.io}
 IMAGE_NAME=${IMAGE_NAME:-w7panel/umrd}
 CTNR_NAME="umrd-build-$$"
 
 echo "Building UMRD v${VERSION}..."
 
+cd "$PROJECT_DIR"
 rm -rf build/ dist/
 
 echo ""
 echo "=== Building Python packages ==="
 python3 -m build --wheel
 python3 -m build --sdist
+
+WHL_FILE=$(ls dist/umrd-*.whl)
 
 echo ""
 echo "=== Building OCI image with buildah ==="
@@ -33,8 +38,8 @@ buildah config --env PYTHONUNBUFFERED=1 "$CTR"
 MOUNT=$(buildah mount "$CTR")
 mkdir -p "$MOUNT/app"
 
-cp dist/umrd-*.whl "$MOUNT/app/"
-buildah run "$CTR" -- pip install --no-cache-dir /app/umrd-*.whl
+cp "$WHL_FILE" "$MOUNT/app/"
+buildah run "$CTR" -- pip install --no-cache-dir "/app/$(basename "$WHL_FILE")"
 
 buildah commit "$CTR" "${IMAGE_NAME}:${VERSION}"
 buildah commit "$CTR" "${IMAGE_NAME}:latest"

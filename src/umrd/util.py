@@ -7,7 +7,7 @@ import argparse
 from logging import handlers, Handler
 from typing import NamedTuple, Dict
 
-UMRD_VERSION = "1.0.0"
+UMRD_VERSION = "2.0.0"
 PAGESIZE = mmap.PAGESIZE
 
 LOGGER = logging.getLogger('umrd')
@@ -17,6 +17,101 @@ FORMATTER = logging.Formatter('%(asctime)s - Line %(lineno)d - %(message)s')
 
 MAXMEMLIMIT = 9223372036854771712
 totalram_pages = 0
+
+# cgroup v2 常量
+CGROUP_V2_ROOT = '/sys/fs/cgroup'
+CGROUP_MEMORY_PATH = CGROUP_V2_ROOT
+CGROUP_CPU_PATH = CGROUP_V2_ROOT
+
+# cgroup v2 接口文件
+CGROUP_MEMORY_STAT = 'memory.stat'
+CGROUP_MEMORY_PRESSURE = 'memory.pressure'
+CGROUP_MEMORY_CURRENT = 'memory.current'
+CGROUP_MEMORY_MAX = 'memory.max'
+CGROUP_MEMORY_LOW = 'memory.low'
+CGROUP_MEMORY_HIGH = 'memory.high'
+CGROUP_MEMORY_EMM = 'memory.emm'  # EMM接口(部分内核支持)
+CGROUP_CGROUP_PROCS = 'cgroup.procs'
+CGROUP_CONTROLLERS = 'cgroup.controllers'
+CGROUP_SUBTREE_CONTROL = 'cgroup.subtree_control'
+
+# cgroup v2 内存接口映射
+def cg_memory_current(path):
+    """读取cgroup v2 memory.current"""
+    try:
+        with open(os.path.join(path, CGROUP_MEMORY_CURRENT), 'r') as f:
+            val = f.read().strip()
+            return int(val) if val != 'max' else MAXMEMLIMIT
+    except:
+        return 0
+
+def cg_memory_max(path):
+    """读取cgroup v2 memory.max"""
+    try:
+        with open(os.path.join(path, CGROUP_MEMORY_MAX), 'r') as f:
+            val = f.read().strip()
+            return int(val) if val != 'max' else MAXMEMLIMIT
+    except:
+        return MAXMEMLIMIT
+
+def cg_memory_stat(path):
+    """读取并解析cgroup v2 memory.stat"""
+    try:
+        stat = {}
+        with open(os.path.join(path, CGROUP_MEMORY_STAT), 'r') as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) == 2:
+                    stat[parts[0].encode()] = parts[1]
+        return stat
+    except:
+        return {}
+
+def cg_has_interface(path, iface):
+    return os.path.exists(os.path.join(path, iface))
+
+def cg_write_value(path, iface, value):
+    try:
+        with open(os.path.join(path, iface), 'w') as f:
+            f.write(str(value))
+        return True
+    except:
+        return False
+
+def cg_try_reclaim(path, target_bytes):
+    if cg_has_interface(path, 'memory.reclaim'):
+        return cg_write_value(path, 'memory.reclaim', str(target_bytes))
+    return False
+
+def cg_set_swappiness(path, swappiness):
+    """cgroup v2无swappiness接口，跳过"""
+    pass
+
+def cg_set_zram_priority(path, priority):
+    if cg_has_interface(path, 'memory.zram.priority'):
+        return cg_write_value(path, 'memory.zram.priority', str(priority))
+    return False
+
+def cg_get_zram_stat(path):
+    """获取zram统计"""
+    stat = {'raw': 0, 'usage': 0}
+    try:
+        if cg_has_interface(path, 'memory.zram.raw_in_bytes'):
+            with open(os.path.join(path, 'memory.zram.raw_in_bytes'), 'r') as f:
+                stat['raw'] = int(f.read().strip())
+    except:
+        pass
+    try:
+        if cg_has_interface(path, 'memory.zram.usage_in_bytes'):
+            with open(os.path.join(path, 'memory.zram.usage_in_bytes'), 'r') as f:
+                stat['usage'] = int(f.read().strip())
+    except:
+        pass
+    return stat
+
+def cg_has_emm():
+    """检查内核是否支持EMM接口"""
+    return os.path.exists('/sys/kernel/mm/lru_gen/min_gen_size')
 
 ANON_ONLY = 201
 FILE_ONLY = 0
@@ -383,10 +478,10 @@ def detect_report_only(output_dir):
 def detect_cgroup_path():
     """Auto-detect the best cgroup path to reclaim."""
     candidates = [
-        "/sys/fs/cgroup/memory/kubepods",
-        "/sys/fs/cgroup/memory/kubepods/burstable",
-        "/sys/fs/cgroup/memory/system.slice",
-        "/sys/fs/cgroup/memory",
+        os.path.join(CGROUP_V2_ROOT, 'kubepods'),
+        os.path.join(CGROUP_V2_ROOT, 'kubepods', 'burstable'),
+        os.path.join(CGROUP_V2_ROOT, 'system.slice'),
+        CGROUP_V2_ROOT,
     ]
     for path in candidates:
         if os.path.exists(path):
@@ -423,10 +518,51 @@ def auto_create_config(conf):
         os.makedirs(blockdir, exist_ok=True)
         if not os.path.exists(blocklist_path):
             with open(blocklist_path, 'w') as f:
-                f.write('/sys/fs/cgroup/memory/umrd\n')
+                f.write(os.path.join(CGROUP_V2_ROOT, 'umrd') + '\n')
+
+def check_cgroup_v2() -> bool:
+    """检查cgroup v2是否可用."""
+    cgroup_path = CGROUP_V2_ROOT
+    
+    if not os.path.exists(cgroup_path):
+        LOGGER.error('cgroup v2 not found at %s', cgroup_path)
+        LOGGER.error('UMRD requires cgroup v2 to be properly mounted')
+        return False
+    
+    controllers_path = os.path.join(cgroup_path, CGROUP_CONTROLLERS)
+    if os.path.exists(controllers_path):
+        with open(controllers_path, 'r') as f:
+            controllers = f.read().strip()
+            if 'memory' in controllers:
+                return True
+    
+    memory_current = os.path.join(cgroup_path, 'memory.current')
+    if os.path.exists(memory_current):
+        return True
+    
+    LOGGER.error('cgroup v2 memory controller not available')
+    LOGGER.error('Please ensure memory controller is enabled')
+    return False
+
+def check_psi() -> bool:
+    """检查PSI是否可用."""
+    psi_path = '/proc/pressure/memory'
+    if os.path.exists(psi_path):
+        return True
+    LOGGER.error('PSI (Pressure Stall Information) not found')
+    LOGGER.error('UMRD requires /proc/pressure/memory')
+    LOGGER.error('Please ensure kernel 4.20+ with PSI support')
+    return False
 
 def check_conf(conf: argparse.Namespace) -> bool:
     os.makedirs(conf.output_dir, exist_ok=True)
+    
+    if not check_cgroup_v2():
+        return False
+    
+    if not check_psi():
+        return False
+    
     detect_wait(conf.wait, conf.output_dir)
 
     if 'DISK_SIZE' in os.environ:
@@ -540,8 +676,7 @@ def check_conf(conf: argparse.Namespace) -> bool:
             nokmem = True
 
     conf.has_cgroup_zram_stat = False
-    # TODO: use root cgroup in new kernel
-    if not nokmem and os.path.exists('/sys/fs/cgroup/memory/memory.zram.raw_in_bytes'):
+    if not nokmem and os.path.exists(os.path.join(CGROUP_V2_ROOT, 'memory.zram.raw_in_bytes')):
         conf.has_cgroup_zram_stat = True
 
     # 定义变量
@@ -565,23 +700,21 @@ def check_conf(conf: argparse.Namespace) -> bool:
     return True
 
 def clear_umrd_cgroup():
-    root_cgroup = '/sys/fs/cgroup/memory'
+    root_cgroup = CGROUP_V2_ROOT
+    if not os.path.exists(root_cgroup):
+        return
     umrd_cgroups = [i for i in os.listdir(root_cgroup) if i.startswith('umrd-')]
     for i in umrd_cgroups:
-        _cg = root_cgroup + '/' + i
-        with open(_cg + '/cgroup.procs', 'rb') as _f:
-            procs = _f.readlines()
-            if len(procs) == 0:
-                os.rmdir(_cg)
-
-    root_cgroup = '/sys/fs/cgroup/cpu,cpuacct/'
-    umrd_cgroups = [i for i in os.listdir(root_cgroup) if i.startswith('umrd-')]
-    for i in umrd_cgroups:
-        _cg = root_cgroup + '/' + i
-        with open(_cg + '/cgroup.procs', 'rb') as _f:
-            procs = _f.readlines()
-            if len(procs) == 0:
-                os.rmdir(_cg)
+        _cg = os.path.join(root_cgroup, i)
+        procs_file = os.path.join(_cg, CGROUP_CGROUP_PROCS)
+        if os.path.exists(procs_file):
+            with open(procs_file, 'rb') as _f:
+                procs = _f.readlines()
+                if len(procs) == 0:
+                    try:
+                        os.rmdir(_cg)
+                    except OSError:
+                        pass
 
 def parse_textinfo(path: str):
     info = {}
@@ -638,18 +771,21 @@ def set_swappiness(ver):
     if not b'5.4.203-1-tlinux4-0011' in ver:
         return
 
-    kube_path = '/sys/fs/cgroup/memory/kubepods'
+    kube_path = os.path.join(CGROUP_V2_ROOT, 'kubepods')
     if not os.path.exists(kube_path):
         return
 
-    with open(kube_path + '/memory.swappiness', 'wb') as _f:
-        _f.write(b'0')
+    swappiness_path = os.path.join(kube_path, 'memory.swappiness')
+    if os.path.exists(swappiness_path):
+        with open(swappiness_path, 'wb') as _f:
+            _f.write(b'0')
 
     for root, dirs, files in os.walk(kube_path):
         for directory in dirs:
-            cg_path = root + '/' + directory + '/memory.swappiness'
-            with open(cg_path, 'wb') as _f:
-                _f.write(b'0')
+            cg_path = os.path.join(root, directory, 'memory.swappiness')
+            if os.path.exists(cg_path):
+                with open(cg_path, 'wb') as _f:
+                    _f.write(b'0')
 
 def check_zram():
     with open('/proc/swaps', 'rb') as _f:

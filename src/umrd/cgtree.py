@@ -6,6 +6,7 @@ from typing import Dict
 
 from .util import ALLOWED, SCAN_ONLY
 from .util import LOGGER, RuleItem, ReclaimParams, ReclaimStat, RECLAIM_PARAMS
+from .util import CGROUP_V2_ROOT
 from .util import enable_oversell, disable_oversell, set_log_level, ensure_zram
 from .cgroup import create_cgroup, SimpleCgroup
 
@@ -106,10 +107,9 @@ class CgroupTree:
 
         if not lines:
             if oversell:
-                content =  "/sys/fs/cgroup/memory" + ' ' + 'interval_anon=5 ratio_anon=0.002 interval_file=10 ratio_file=0.0002'
+                content = CGROUP_V2_ROOT + ' ' + 'interval_anon=5 ratio_anon=0.002 interval_file=10 ratio_file=0.0002'
             else:
-                # use cli params for non-oversell
-                content = "/sys/fs/cgroup/memory/"
+                content = CGROUP_V2_ROOT + '/'
             with open(allowlist, 'wb') as allow_file:
                 allow_file.write(content.encode('ascii'))
             lines = [content]
@@ -134,7 +134,7 @@ class CgroupTree:
             block_list = sorted([self.umrd_cgroup] + [i.strip() for i in _f])
             block_list = [i.rstrip('/') if i != '/' else i for i in block_list]
             if self.conf.mode == 1:
-                block_list = ['/sys/fs/cgroup/memory/'] + block_list
+                block_list = [CGROUP_V2_ROOT + '/'] + block_list
             block_list = list(set(block_list) - set(['']))
 
         # block_updated is true means that block_list is not None

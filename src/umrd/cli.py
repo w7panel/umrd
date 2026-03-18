@@ -56,8 +56,8 @@ PARSER.add_argument('--comp-alg', type=str, default='lzo-rle',
                     help='The compressed algorithm used in zram device.')
 
 # allowlist. e.g., /tmp/allowlist. The content is like:
-#   /sys/fs/cgroup/memory/sub_cgroup_1
-#   /sys/fs/cgroup/memory/sub_cgroup_2
+#   /sys/fs/cgroup/kubepods/burstable/pod1
+#   /sys/fs/cgroup/kubepods/burstable/pod2
 # if parent cgroup and child cgroup are both in allowlist, only keeps parent cgroup in the list
 PARSER.add_argument('--allowlist', type=str, default='/run/umrd/allowlist.cfg',
                     help='Allowlist file path, one cgroup path per line. '

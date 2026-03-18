@@ -8,8 +8,9 @@ import cProfile
 import collections
 
 from .util import LOGGER, ReclaimStat
+from .util import CGROUP_V2_ROOT, CGROUP_CPU_PATH
 from .util import parse_textinfo, get_global_pressure_some_avg10, get_global_pressure_some_total, get_cpu_util, get_zram, ensure_zram
-from .util import get_curr_time, detect_report_only
+from .util import get_curr_time, detect_report_only, cg_memory_current, cg_memory_stat, cg_has_interface
 from .cgtree import CgroupTree
 
 CFS_PEROID_US = 100000
@@ -36,13 +37,13 @@ class UMRD:
         self.cpu_cgroup = cpu_cgroup = ''
         try:
             cpu_cgroup = proc_cgroup_info['cpu']
-            self.cpu_cgroup = '/sys/fs/cgroup/cpu,cpuacct/' + cpu_cgroup
+            self.cpu_cgroup = 'CGROUP_CPU_PATH/' + cpu_cgroup
         except KeyError:
             LOGGER.error('umrd process cgroup has no cpu cgroup information: %s', proc_cgroup_info)
         self.mem_cgroup = mem_cgpath = ''
         try:
             mem_cgpath = proc_cgroup_info['mem']
-            self.mem_cgroup =  '/sys/fs/cgroup/memory/' + mem_cgpath
+            self.mem_cgroup = os.path.join(CGROUP_V2_ROOT, mem_cgpath)
         except KeyError:
             LOGGER.error('umrd process cgroup has no mem cgroup information: %s', proc_cgroup_info)
 
@@ -59,9 +60,9 @@ class UMRD:
             else:
                 LOGGER.info('UMRD in other mode')
                 try:
-                    cpu_cgroup = '/sys/fs/cgroup/cpu,cpuacct/umrd-%s' % (self.pid)
+                    cpu_cgroup = os.path.join(CGROUP_CPU_PATH, 'umrd-%s' % (self.pid))
                     os.makedirs(cpu_cgroup, exist_ok=True)
-                    with open(cpu_cgroup + '/cgroup.procs', 'wb') as _f:
+                    with open(os.path.join(cpu_cgroup, 'cgroup.procs'), 'wb') as _f:
                         _f.write(str(self.pid).encode('ascii'))
                     self.cpu_cgroup = cpu_cgroup
                     self.set_cpu_quota_and_offline(conf)
@@ -73,9 +74,9 @@ class UMRD:
                                      'the new cpu cgroup for %s', self.cpu_cgroup, exp)
 
                 try:
-                    mem_cgroup = '/sys/fs/cgroup/memory/umrd-%s' % (self.pid)
+                    mem_cgroup = os.path.join(CGROUP_V2_ROOT, 'umrd-%s' % (self.pid))
                     os.makedirs(mem_cgroup, exist_ok=True)
-                    with open(mem_cgroup + '/cgroup.procs', 'wb') as _f:
+                    with open(os.path.join(mem_cgroup, 'cgroup.procs'), 'wb') as _f:
                         _f.write(str(self.pid).encode('ascii'))
                     self.mem_cgroup = mem_cgroup
                 except Exception as exp:
@@ -130,8 +131,9 @@ class UMRD:
         if not os.path.exists('/proc/sys/kernel/cpu_qos'):
             LOGGER.error('[cpu_offline_condition] /proc/sys/kernel/cpu_qos not exist')
             return False
-        if not os.path.exists('/sys/fs/cgroup/cpu/cpu.offline'):
-            LOGGER.error('[cpu_offline_condition] /sys/fs/cgroup/cpu/cpu.offline not exist')
+        cpu_offline_path = os.path.join(CGROUP_CPU_PATH, 'cpu.offline')
+        if not os.path.exists(cpu_offline_path):
+            LOGGER.error('[cpu_offline_condition] %s not exist', cpu_offline_path)
             return False
 
         with open('/proc/version', 'rb') as _f:
@@ -164,7 +166,7 @@ class UMRD:
             LOGGER.info('Failed to clean %s/cpu.offline for : %s', self.cpu_cgroup, exp)
 
         try:
-            with open('/sys/fs/cgroup/cpu,cpuacct/cgroup.procs', 'wb') as _f:
+            with open('CGROUP_CPU_PATH/cgroup.procs', 'wb') as _f:
                 _f.write(str(self.pid).encode('ascii'))
         except:
             LOGGER.info('Failed to migrate umrd process to cpu root cgroup.')
@@ -192,11 +194,11 @@ class UMRD:
         if self.cgtree.conf.set_offline and self.cpu_offline_condition():
             self.cpu_offline_clean()
         try:
-            with open('/sys/fs/cgroup/memory/cgroup.procs', 'wb') as _f:
+            with open(os.path.join(CGROUP_V2_ROOT, 'cgroup.procs'), 'wb') as _f:
                 _f.write(str(self.pid).encode('ascii'))
         except:
             LOGGER.info('Failed to migrate umrd process to root cgroup.')
-        with open(self.mem_cgroup + '/cgroup.procs', 'rb') as _f:
+        with open(os.path.join(self.mem_cgroup, 'cgroup.procs'), 'rb') as _f:
             procs = _f.readlines()
         if len(procs) == 0:
             os.rmdir(self.mem_cgroup)
@@ -230,7 +232,7 @@ class UMRD:
         # that the memcg_total_history[0] is zero.
         if self.memcg_total_history[0] == 0:
             return True
-        with open(self.mem_cgroup + '/memory.pressure', 'rb') as psi:
+        with open(os.path.join(self.mem_cgroup, 'memory.pressure'), 'rb') as psi:
             some = psi.readline().replace(b'=', b' ').split()
             some_total = float(some[8])
             delta_total = some_total - self.memcg_total_history[0]
@@ -459,17 +461,32 @@ class UMRD:
             int(meminfo_raw[b'MemFree:']) * 1024)
         mem_used = mem_total - mem_free
 
-        zram_orig, zram_compr, compr_ratio = get_node_anon_compr_ratio()
+        zram_orig, zram_compr = get_zram()
+        if zram_orig is None or zram_compr is None:
+            compr_ratio = 1
+            zram_orig = 0
+            zram_compr = 0
+        elif zram_orig == 0:
+            compr_ratio = 0
+        else:
+            compr_ratio = zram_compr / zram_orig
         mem_limit = mem_total
         anon_save = zram_orig - zram_compr
         memsw_usage, file_save = 0, 0
-        with open('/sys/fs/cgroup/memory/memory.memsw.usage_in_bytes', 'rb') as _f:
-            memsw_usage = int(_f.readline().decode('utf-8'))
+        memsw_usage = cg_memory_current(CGROUP_V2_ROOT)
+        swap_current = 0
+        if cg_has_interface(CGROUP_V2_ROOT, 'memory.swap.current'):
+            try:
+                with open(os.path.join(CGROUP_V2_ROOT, 'memory.swap.current'), 'r') as f:
+                    swap_current = int(f.read().strip())
+            except:
+                pass
+        memsw_usage += swap_current
         if self.cgtree.conf.has_cgroup_zram_stat:
-            if self.cgtree.conf.use_emm_zram:
-                ret = parse_textinfo('/sys/fs/cgroup/memory/memory.emm.workingset')
+            if self.cgtree.conf.use_emm_zram and cg_has_interface(CGROUP_V2_ROOT, 'memory.emm.workingset'):
+                ret = parse_textinfo(os.path.join(CGROUP_V2_ROOT, 'memory.emm.workingset'))
             else:
-                ret = parse_textinfo('/sys/fs/cgroup/memory/memory.stat')
+                ret = cg_memory_stat(CGROUP_V2_ROOT)
             val = int(ret.get(b'workingset_refault_distance_avg_10m', 0)) + \
                     int(ret.get(b'workingset_valid_eviction_avg_10m', 0))
             file_save = val * 4096 / 2
@@ -557,12 +574,12 @@ class UMRD:
         # calculate global file save
         file_save_avg = 0
         if self.cgtree.conf.has_cgroup_zram_stat:
-            if self.cgtree.conf.use_emm_zram:
-                ret = parse_textinfo('/sys/fs/cgroup/memory/memory.emm.workingset')
+            if self.cgtree.conf.use_emm_zram and cg_has_interface(CGROUP_V2_ROOT, 'memory.emm.workingset'):
+                ret = parse_textinfo(os.path.join(CGROUP_V2_ROOT, 'memory.emm.workingset'))
             else:
-                ret = parse_textinfo('/sys/fs/cgroup/memory/memory.stat')
-            val = int(ret[b'workingset_refault_distance_avg_10m']) + \
-                    int(ret[b'workingset_valid_eviction_avg_10m'])
+                ret = cg_memory_stat(CGROUP_V2_ROOT)
+            val = int(ret.get(b'workingset_refault_distance_avg_10m', 0)) + \
+                    int(ret.get(b'workingset_valid_eviction_avg_10m', 0))
             file_save_avg = val * 4096 / 2
 
         save_ratio = (anon_save + file_save) / (max_memusage or 1) * 100
