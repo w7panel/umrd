@@ -490,38 +490,34 @@ def detect_cgroup_path():
     return ""
 
 def _validate_and_update_config(config_path, detected_path):
-    """验证配置文件，如果内容不正确则更新."""
     allowdir = os.path.dirname(config_path)
     os.makedirs(allowdir, exist_ok=True)
     
     detected_exists = os.path.exists(detected_path) if detected_path else False
     
     if not os.path.exists(config_path):
-        # 文件不存在，直接创建
         if detected_path and detected_exists:
             with open(config_path, 'w') as f:
                 f.write(detected_path + '\n')
             LOGGER.info('[UMRD] Auto-created config: %s -> %s', config_path, detected_path)
         return
     
-    # 文件存在，检查内容是否有效
     if not detected_exists:
-        return  # 无法检测到有效路径，保持原配置
+        return
     
     try:
         with open(config_path, 'r') as f:
-            current_content = f.read().strip().split('\n')[0]  # 取第一行
+            current_content = f.read().strip().split('\n')[0]
     except Exception:
         current_content = ""
     
-    # 检查当前配置是否有效
-    current_valid = current_content and os.path.exists(current_content)
+    if current_content == detected_path:
+        return
     
-    # 如果当前配置无效，替换为检测到的路径
-    if not current_valid:
+    if detected_exists:
         with open(config_path, 'w') as f:
             f.write(detected_path + '\n')
-        LOGGER.info('[UMRD] Updated invalid config: %s -> %s', config_path, detected_path)
+        LOGGER.info('[UMRD] Updated config: %s -> %s', config_path, detected_path)
 
 
 def auto_create_config(conf):
