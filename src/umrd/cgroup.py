@@ -284,18 +284,16 @@ class CgroupZramStat(CgroupStat):
     def update_usage(self):
         super().update_usage()
 
+        self.zram_raw_in_bytes = 0
+        self.zram_usage_in_bytes = 0
+        if self.is_cgroot:
+            return
+
         try:
-            if not self.is_cgroot:
-                zram_stat = cg_get_zram_stat(self.path)
-                self.zram_raw_in_bytes = zram_stat.get('raw', 0)
-                self.zram_usage_in_bytes = zram_stat.get('usage', 0)
-            else:
-                zram_orig, zram_compr = get_zram()
-                self.zram_raw_in_bytes = zram_orig
-                self.zram_usage_in_bytes = zram_compr
+            zram_stat = cg_get_zram_stat(self.path)
+            self.zram_raw_in_bytes = zram_stat.get('raw', 0)
+            self.zram_usage_in_bytes = zram_stat.get('usage', 0)
         except:
-            self.zram_raw_in_bytes = 0
-            self.zram_usage_in_bytes = 0
             LOGGER.info('%s CgroupZramStat update_usage failed', self.path)
 
     def update_compr_ratio(self, _root_compr_ratio: float):
