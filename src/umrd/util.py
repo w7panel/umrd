@@ -489,36 +489,61 @@ def detect_cgroup_path():
             return path
     return ""
 
+def _validate_and_update_config(config_path, detected_path):
+    """验证配置文件，如果内容不正确则更新."""
+    allowdir = os.path.dirname(config_path)
+    os.makedirs(allowdir, exist_ok=True)
+    
+    detected_exists = os.path.exists(detected_path) if detected_path else False
+    
+    if not os.path.exists(config_path):
+        # 文件不存在，直接创建
+        if detected_path and detected_exists:
+            with open(config_path, 'w') as f:
+                f.write(detected_path + '\n')
+            LOGGER.info('[UMRD] Auto-created config: %s -> %s', config_path, detected_path)
+        return
+    
+    # 文件存在，检查内容是否有效
+    if not detected_exists:
+        return  # 无法检测到有效路径，保持原配置
+    
+    try:
+        with open(config_path, 'r') as f:
+            current_content = f.read().strip().split('\n')[0]  # 取第一行
+    except Exception:
+        current_content = ""
+    
+    # 检查当前配置是否有效
+    current_valid = current_content and os.path.exists(current_content)
+    
+    # 如果当前配置无效，替换为检测到的路径
+    if not current_valid:
+        with open(config_path, 'w') as f:
+            f.write(detected_path + '\n')
+        LOGGER.info('[UMRD] Updated invalid config: %s -> %s', config_path, detected_path)
+
+
 def auto_create_config(conf):
     """Auto-create default allowlist if not exists."""
-    allowlist_path = conf.allowlist
-    blocklist_path = conf.blocklist
-    oversell_allowlist_path = conf.allowlist_oversell
-
     if conf.allowlist_empty:
         return
 
-    allowdir = os.path.dirname(allowlist_path)
-    os.makedirs(allowdir, exist_ok=True)
+    # 检测应该使用的 cgroup 路径
+    detected_path = detect_cgroup_path()
+    
+    # 验证并更新 allowlist
+    _validate_and_update_config(conf.allowlist, detected_path)
+    
+    # 验证并更新 allowlist_oversell
+    _validate_and_update_config(conf.allowlist_oversell, detected_path)
 
-    if not os.path.exists(allowlist_path):
-        cgroup_path = detect_cgroup_path()
-        if cgroup_path:
-            with open(allowlist_path, 'w') as f:
-                f.write(cgroup_path + '\n')
-            print(f'[UMRD] Auto-created allowlist: {allowlist_path} -> {cgroup_path}')
-
-    if not os.path.exists(oversell_allowlist_path):
-        cgroup_path = detect_cgroup_path()
-        if cgroup_path:
-            with open(oversell_allowlist_path, 'w') as f:
-                f.write(cgroup_path + '\n')
-
+    # blocklist 使用特殊值 umrd
     if not conf.blocklist_empty and conf.blocklist:
-        blockdir = os.path.dirname(blocklist_path)
+        blockdir = os.path.dirname(conf.blocklist)
         os.makedirs(blockdir, exist_ok=True)
-        if not os.path.exists(blocklist_path):
-            with open(blocklist_path, 'w') as f:
+        if not os.path.exists(conf.blocklist):
+            with open(conf.blocklist, 'w') as f:
                 f.write(os.path.join(CGROUP_V2_ROOT, 'umrd') + '\n')
 
 def check_cgroup_v2() -> bool:
