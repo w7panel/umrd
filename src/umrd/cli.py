@@ -61,10 +61,10 @@ PARSER.add_argument('--comp-alg', type=str, default='lzo-rle',
 # if parent cgroup and child cgroup are both in allowlist, only keeps parent cgroup in the list
 PARSER.add_argument('--allowlist', type=str, default='/run/umrd/allowlist.cfg',
                     help='Allowlist file path, one cgroup path per line. '
-                    'Default empty, allow non cgroup. If set *, allow all cgroups.')
+                    'If not set, monitor all cgroups.')
 PARSER.add_argument('--allowlist_oversell', type=str, default='/run/umrd/allowlist_oversell.cfg',
-                    help='Allowlist file path for oversell, one cgroup path per line. '
-                    'Default empty, allow non cgroup. If set *, allow all cgroups.')
+                    help='Allowlist file path for oversell. '
+                    'If not set, monitor all cgroups.')
 # blocklist
 PARSER.add_argument('--blocklist', type=str, default='/run/umrd/blocklist.cfg',
                     help='Blocklist file path, one cgroup path per line. '

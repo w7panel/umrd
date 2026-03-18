@@ -475,72 +475,16 @@ def detect_wait(wait, output_dir):
 def detect_report_only(output_dir):
     return os.path.exists(os.path.join(output_dir, 'report_only'))
 
-def detect_cgroup_path():
-    """Auto-detect the best cgroup path to reclaim."""
-    candidates = [
-        os.path.join(CGROUP_V2_ROOT, 'kubepods.slice'),
-        os.path.join(CGROUP_V2_ROOT, 'kubepods'),
-        os.path.join(CGROUP_V2_ROOT, 'kubepods', 'burstable'),
-        os.path.join(CGROUP_V2_ROOT, 'system.slice'),
-        CGROUP_V2_ROOT,
-    ]
-    for path in candidates:
-        if os.path.exists(path):
-            return path
-    return ""
-
-def _validate_and_update_config(config_path, detected_path):
-    allowdir = os.path.dirname(config_path)
-    os.makedirs(allowdir, exist_ok=True)
-    
-    detected_exists = os.path.exists(detected_path) if detected_path else False
-    
-    if not os.path.exists(config_path):
-        if detected_path and detected_exists:
-            with open(config_path, 'w') as f:
-                f.write(detected_path + '\n')
-            LOGGER.info('[UMRD] Auto-created config: %s -> %s', config_path, detected_path)
-        return
-    
-    if not detected_exists:
-        return
-    
-    try:
-        with open(config_path, 'r') as f:
-            current_content = f.read().strip().split('\n')[0]
-    except Exception:
-        current_content = ""
-    
-    if current_content == detected_path:
-        return
-    
-    if detected_exists:
-        with open(config_path, 'w') as f:
-            f.write(detected_path + '\n')
-        LOGGER.info('[UMRD] Updated config: %s -> %s', config_path, detected_path)
-
-
 def auto_create_config(conf):
-    """Auto-create default allowlist if not exists."""
     if conf.allowlist_empty:
         return
 
-    # 检测应该使用的 cgroup 路径
-    detected_path = detect_cgroup_path()
-    
-    # 验证并更新 allowlist
-    _validate_and_update_config(conf.allowlist, detected_path)
-    
-    # 验证并更新 allowlist_oversell
-    _validate_and_update_config(conf.allowlist_oversell, detected_path)
+    allowdir = os.path.dirname(conf.allowlist)
+    os.makedirs(allowdir, exist_ok=True)
 
-    # blocklist 使用特殊值 umrd
     if not conf.blocklist_empty and conf.blocklist:
         blockdir = os.path.dirname(conf.blocklist)
         os.makedirs(blockdir, exist_ok=True)
-        if not os.path.exists(conf.blocklist):
-            with open(conf.blocklist, 'w') as f:
-                f.write(os.path.join(CGROUP_V2_ROOT, 'umrd') + '\n')
 
 def check_cgroup_v2() -> bool:
     """检查cgroup v2是否可用."""
