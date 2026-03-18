@@ -547,11 +547,20 @@ class SimpleCgroup(BasicCgroup):
         self.cgstat.update_anon_save()
         self.cgstat.update_file_save(stat)
 
-        for _cg in self.children.values():
-            _cg.get_memsaving_recursive(compr_ratio)
+        mem_limit = self.cgstat.memtotal
+        msw_usage = self.cgstat.memsw_usage
+        anon_save = self.cgstat.anon_save
+        file_save = self.cgstat.file_save
 
-        return (self.cgstat.memtotal, self.cgstat.memsw_usage,
-                self.cgstat.anon_save, self.cgstat.file_save)
+        for _cg in self.children.values():
+            child_mem_limit, child_msw_usage, child_anon_save, child_file_save = (
+                _cg.get_memsaving_recursive(compr_ratio))
+            mem_limit += child_mem_limit
+            msw_usage += child_msw_usage
+            anon_save += child_anon_save
+            file_save += child_file_save
+
+        return mem_limit, msw_usage, anon_save, file_save
 
     # Cgroupfs IO
     def do_reclaim(self, reclaim_mem: int):

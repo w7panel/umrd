@@ -214,7 +214,7 @@ class CgroupTree:
 
                 # Check for valid cgroup memory mount
                 if mount[0] == 'cgroup2':
-                    continue
+                    pass  # cgroup v2 supported
                 elif mount[0] == 'cgroup' and mount[-3].endswith(',memory'):
                     pass
                 elif mount[0] == 'memory' and mount[2] == 'cgroup':
