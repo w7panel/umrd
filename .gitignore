@@ -80,3 +80,4 @@ registryconfig.yaml
 # Config files (contain secrets)
 gitconfig.yaml
 registryconfig.yaml
+src/umrd/_version.py
