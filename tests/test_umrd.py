@@ -1,5 +1,5 @@
-# Copyright (c) 2024 Tencent Cloud.
-# SPDX-License-Identifier: GPL-2.0
+# Copyright (c) 2024 w7panel
+# SPDX-License-Identifier: Apache-2.0
 
 """
 Test module for umrd package.

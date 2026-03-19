@@ -1,7 +1,7 @@
 [Unit]
 Description=Userspace Memory Reclaim Daemon
 Documentation=https://github.com/w7panel/umrd
-ConditionPathExists=/proc/pressure
+ConditionPathExists=/proc/pressure/memory
 
 [Service]
 Type=simple

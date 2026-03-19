@@ -8,6 +8,8 @@
 
 ## 项目概述
 
+> **致谢**: UMRD 2.0 基础代码源自 [Tencent Cloud umrd 1.0](https://github.com/TencentCloud/umrd)，并针对 cgroup v2 进行了深度适配和重构。
+
 UMRD (Userspace Memory Reclaimer Daemon) 是用户空间内存回收守护进程，通过监控 cgroup 内存压力动态回收内存。
 
 ### 核心功能
