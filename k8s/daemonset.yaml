@@ -21,7 +21,7 @@ spec:
       hostPID: true
       containers:
       - name: umrd
-        image: zpk.idc.w7.com/w7panel/umrd-dev:latest
+        image: zpk.idc.w7.com/w7panel/umrd:latest
         imagePullPolicy: IfNotPresent
         command: ["python3", "-m", "umrd"]
         args:
@@ -52,17 +52,12 @@ spec:
             cpu: 500m
             memory: 256Mi
         volumeMounts:
-        - name: cgroup
-          mountPath: /sys/fs/cgroup
         - name: kernel-modules
           mountPath: /lib/modules
           readOnly: true
         - name: run
           mountPath: /run/umrd
       volumes:
-      - name: cgroup
-        hostPath:
-          path: /sys/fs/cgroup
       - name: kernel-modules
         hostPath:
           path: /lib/modules

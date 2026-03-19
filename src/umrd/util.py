@@ -516,9 +516,23 @@ def check_psi() -> bool:
     psi_path = '/proc/pressure/memory'
     if os.path.exists(psi_path):
         return True
+
+    # Provide helpful diagnostic message
+    try:
+        with open('/proc/cmdline', 'r') as f:
+            cmdline = f.read()
+            if 'psi=1' in cmdline or 'psi=true' in cmdline:
+                LOGGER.error('PSI enabled in kernel cmdline but /proc/pressure/memory not found')
+                LOGGER.error('This may indicate a kernel or container configuration issue')
+            else:
+                LOGGER.error('PSI not enabled. To enable PSI, add "psi=1" to kernel cmdline')
+                LOGGER.error('On RHEL/CentOS: grubby --update-kernel=DEFAULT --args="psi=1"')
+                LOGGER.error('Then reboot the node')
+    except:
+        pass
+
     LOGGER.error('PSI (Pressure Stall Information) not found')
     LOGGER.error('UMRD requires /proc/pressure/memory')
-    LOGGER.error('Please ensure kernel 4.20+ with PSI support')
     return False
 
 def check_conf(conf: argparse.Namespace) -> bool:
@@ -545,7 +559,7 @@ def check_conf(conf: argparse.Namespace) -> bool:
         conf.zram_reject_size = -1
 
     if conf.disk_size > 0:
-        conf.disk_path = '/opt/eklet-agent/swap.blk'
+        conf.disk_path = os.path.join(conf.output_dir, 'zram.swap')
     else:
         conf.disk_path = None
 
@@ -901,14 +915,18 @@ def set_loop_dev(disk_path, disk_size):
         raise Exception('losetup --direct-io=on /dev/loop0 %s failed' % disk_path)
 
 def ensure_zram(comp_alg=None, use_emm_zram=False,
-                disk_path='/opt/eklet-agent/swap.blk',
+                disk_path='/run/umrd/zram.swap',
                 disk_size=0, zram_reject_size=-1):
-    if check_zram():
-        return
     if use_emm_zram:
         remodprobe_emm_zram(comp_alg)
     else:
         remodprobe_default_zram(comp_alg)
+
+    # Force reset even if zram is already in use
+    if check_zram():
+        LOGGER.info('zram0 already active, forcing reset')
+        os.system('swapoff /dev/zram0 2>/dev/null')
+        time.sleep(1)
 
     for _ in range(3):
         LOGGER.debug('  >>> echo 1 > /sys/block/zram0/reset')

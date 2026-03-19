@@ -27,6 +27,23 @@ license: Apache-2.0
 | `memory.memsw.usage_in_bytes` | `memory.current` + `memory.swap.current` |
 | `memory.swappiness` | 不存在 |
 
+### PSI (Pressure Stall Information)
+
+⚠️ UMRD **必须**依赖 PSI 进行内存压力检测
+
+- 路径: `/proc/pressure/memory`
+- 启用方式: 内核参数 `psi=1`
+- CentOS/RHEL: `grubby --update-kernel=DEFAULT --args="psi=1" && reboot`
+
+```bash
+# 检查
+cat /proc/cmdline | grep psi
+
+# 如果不存在，添加参数
+grubby --update-kernel=DEFAULT --args="psi=1"
+reboot
+```
+
 ## 代码规范
 
 ### 路径必须使用变量
@@ -115,19 +132,18 @@ save ratio: xx%           # 节省比例
 - [ ] `python3 -m py_compile src/umrd/*.py` 语法检查
 - [ ] `python3 -c "from umrd import *"` 模块导入
 - [ ] `grep -r "cgroup/memory" .` 无 v1 路径残留
-- [ ] 版本号一致: pyproject.toml, util.py, README.md
+- [ ] `grep -r "sys/kernel/psi" .` 无 PSI sysfs 路径硬编码
+- [ ] 版本号一致: pyproject.toml, README.md
 
 ## 构建命令
 
 ```bash
-# Wheel
-python3 -m build --wheel
+# 构建 (自动更新版本)
+./scripts/build.sh
 
-# Docker (buildah)
-buildah bud --tag zpk.idc.w7.com/w7panel/umrd:2.0.0
-
-# 推送
-buildah push zpk.idc.w7.com/w7panel/umrd:2.0.0
+# 推送镜像
+buildah push zpk.idc.w7.com/w7panel/umrd:2.0.0 docker://zpk.idc.w7.com/w7panel/umrd:2.0.0
+buildah push zpk.idc.w7.com/w7panel/umrd:2.0.0latest docker://zpk.idc.w7.com/w7panel/umrd:2.0.0latest
 ```
 
 ## 目录结构

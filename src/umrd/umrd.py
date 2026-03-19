@@ -262,7 +262,7 @@ class UMRD:
         reclaim_interval = []
         if self.cgtree.conf.reclaim_mode == "simple":
             reclaim_interval = [self.cgtree.conf.interval]
-        elif self.cgtree.conf.reclaim_mode == "emm":
+        elif self.cgtree.conf.reclaim_mode.startswith("emm"):
             reclaim_interval = [self.cgtree.conf.interval_anon,
                               self.cgtree.conf.interval_file]
         else:
@@ -338,7 +338,7 @@ class UMRD:
 
             if self.cgtree.conf.reclaim_mode == 'simple':
                 self.cgtree.accum_reclaim_simple += reclaimed
-            elif self.cgtree.conf.reclaim_mode == 'emm':
+            elif self.cgtree.conf.reclaim_mode.startswith('emm'):
                 self.cgtree.accum_reclaim_anon += reclaimed_anon
                 self.cgtree.accum_reclaim_file += reclaimed_file
 

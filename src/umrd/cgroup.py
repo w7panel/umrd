@@ -18,15 +18,18 @@ def create_cgroup(tree, path: str, rule: RuleItem, params: ReclaimParams, is_cgr
         return NegativeCgroup(path, rule)
     if params is None:
         return BasicCgroup(tree, path, rule, params, is_cgroot)
-    if params.reclaim_mode == "simple":
-        return SimpleCgroup(tree, path, rule, params, is_cgroot)
-    if params.reclaim_mode == "emm":
+
+    # Emm-compat uses both EMM and simple reclaim, fallback to simple if EMM unavailable
+    if params.reclaim_mode.startswith("emm"):
         if tree.lru_gen == 0:
-            LOGGER.info('Fallback from emm to simple for mglru disabled.')
+            LOGGER.info('Fallback from %s to simple for mglru disabled.', params.reclaim_mode)
             return SimpleCgroup(tree, path, rule, params, is_cgroot)
         return EMMCgroup(tree, path, rule, params, is_cgroot)
 
-    LOGGER.critical("Unsupport relcaim mode %s", params.reclaim_mode)
+    if params.reclaim_mode == "simple":
+        return SimpleCgroup(tree, path, rule, params, is_cgroot)
+
+    LOGGER.critical("Unsupported reclaim mode %s", params.reclaim_mode)
     return None
 
 
@@ -413,13 +416,29 @@ class BasicCgroup(CGroup):
             child.set_zram_priority(zram_priority)
 
     def get_memsaving_recursive(self, compr_ratio: float):
+        # Recursively collect stats from all descendant cgroups
         memtotal, memsw_usage, anon_save, file_save = 0, 0, 0, 0
+
+        # In cgroup v2, memory.current includes children's memory.
+        # Only collect stats from leaf nodes (no monitored children).
         for child in self.children.values():
             (c, m, a, f) = child.get_memsaving_recursive(compr_ratio)
             memtotal += c
             memsw_usage += m
             anon_save += a
             file_save += f
+
+        if not self.children:
+            # BasicCgroup doesn't have reclaim capability, but still track stats
+            self.cgstat.update_usage()
+            stat = self.cgstat.update_stat()
+            self.cgstat.update_compr_ratio(compr_ratio)
+            self.cgstat.update_anon_save()
+            self.cgstat.update_file_save(stat)
+
+            return (self.cgstat.memtotal, self.cgstat.memsw_usage,
+                    self.cgstat.anon_save, self.cgstat.file_save)
+
         return memtotal, memsw_usage, anon_save, file_save
 
     def get_normalized_file_save(self, file_save_ratio: float, compr_ratio: float):

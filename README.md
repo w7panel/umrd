@@ -38,6 +38,32 @@ cd umrd
 
 ## Kubernetes 部署 (推荐)
 
+### 前置要求
+
+**1. cgroup v2**
+```bash
+# 检查 cgroup v2
+ls /sys/fs/cgroup/
+# 应显示 cgroup2... 而不是 memory/
+```
+
+**2. PSI (Pressure Stall Information)**
+UMRD 需要 PSI 支持。如果 `/proc/pressure/memory` 不存在，需要启用 PSI：
+
+```bash
+# 检查 PSI
+cat /proc/pressure/memory
+
+# 如果不存在，启用 PSI (需要 root)
+grubby --update-kernel=DEFAULT --args="psi=1"
+reboot
+
+# 验证
+cat /proc/cmdline | grep psi
+```
+
+### 部署
+
 ```bash
 # 应用 DaemonSet
 kubectl apply -f k8s/daemonset.yaml
@@ -58,7 +84,8 @@ kubectl rollout restart daemonset umrd -n kube-system
 - **Namespace**: `kube-system`
 - **运行模式**: DaemonSet，每个节点一个 Pod
 - **特权模式**: 需要 `privileged: true` 和 `hostPID: true`
-- **cgroup**: 自动使用 cgroup v2，监控所有 cgroup
+- **cgroup**: CRI 自动挂载 cgroup v2，无需手动挂载
+- **PSI**: 需要节点内核参数 `psi=1`
 
 ---
 
@@ -275,12 +302,12 @@ LastReclaimCost: 0 s             # 上次回收耗时
 
 ## 内核依赖
 
-| 特性 | 路径 | 必须 |
-|------|------|------|
-| cgroup v2 | /sys/fs/cgroup/ | **是** |
-| PSI | /proc/pressure/* | 是 |
-| ZRAM | /sys/block/zram0/* | 否 |
-| EMM | /sys/fs/cgroup/*/memory.emm.* | 否 |
+| 特性 | 路径 | 必须 | 说明 |
+|------|------|------|------|
+| cgroup v2 | /sys/fs/cgroup/ | **是** | CRI 自动挂载 |
+| PSI | /proc/pressure/* | **是** | 需要内核参数 `psi=1` |
+| ZRAM | /sys/block/zram0/* | 否 | 内核模块 |
+| EMM | /sys/fs/cgroup/*/memory.emm.* | 否 | 多代 LRU |
 
 ---
 
@@ -359,8 +386,11 @@ tail -f /run/umrd/umrd.log
 # 检查 cgroup v2
 ls /sys/fs/cgroup/
 
-# 检查内存压力
+# 检查 PSI
 cat /proc/pressure/memory
+
+# 检查内核参数
+cat /proc/cmdline | grep psi
 
 # 检查 zram
 ls /sys/block/zram0/
@@ -371,7 +401,8 @@ cat /sys/block/zram0/mm_stat
 
 | 问题 | 可能原因 | 解决方案 |
 |------|----------|----------|
-| Pod 无法启动 | cgroup v1 不支持 | 使用 cgroup v2 内核 |
+| Pod 无法启动 "PSI not found" | PSI 未启用 | 节点添加 `psi=1` 内核参数 |
+| Pod 无法启动 "cgroup v2 not found" | 使用 cgroup v1 | 切换到 cgroup v2 内核 |
 | 回收不生效 | 内存充足无需回收 | 检查 mem_save 中的 pct_usage |
 | AccumReclaim 全为 0 | 内存使用率低于阈值 | 检查 pct-trigger-reclaim 值 |
 | ZRAM 未启用 | 内核不支持 | 检查内核模块 |
