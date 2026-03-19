@@ -8,8 +8,8 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 VERSION=$(grep '^version = ' "$PROJECT_DIR/pyproject.toml" | cut -d'"' -f2)
-REGISTRY=${REGISTRY:-docker.io}
-IMAGE_NAME=${IMAGE_NAME:-w7panel/umrd}
+REGISTRY=${REGISTRY:-zpk.idc.w7.com}
+IMAGE_NAME=${IMAGE_NAME:-zpk.idc.w7.com/w7panel/umrd}
 CTNR_NAME="umrd-build-$$"
 
 echo "Building UMRD v${VERSION}..."
@@ -57,6 +57,6 @@ echo "OCI images:"
 buildah images "${IMAGE_NAME}"
 
 echo ""
-echo "Next steps:"
-echo "  PyPI:      twine upload dist/*"
-echo "  Registry:   buildah push ${IMAGE_NAME}:${VERSION} docker://${IMAGE_NAME}:${VERSION}"
+echo "To push to registry:"
+echo "  buildah push ${IMAGE_NAME}:${VERSION} docker://${IMAGE_NAME}:${VERSION}"
+echo "  buildah push ${IMAGE_NAME}:latest docker://${IMAGE_NAME}:latest"

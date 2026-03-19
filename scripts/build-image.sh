@@ -6,8 +6,8 @@
 set -e
 
 VERSION=${1:-2.0.0}
-REGISTRY=${REGISTRY:-docker.io}
-IMAGE_NAME=${IMAGE_NAME:-w7panel/umrd}
+REGISTRY=${REGISTRY:-zpk.idc.w7.com}
+IMAGE_NAME=${IMAGE_NAME:-zpk.idc.w7.com/w7panel/umrd}
 CTNR_NAME="umrd-build"
 
 echo "Building UMRD OCI image v${VERSION}..."
@@ -40,9 +40,10 @@ buildah rm "$CTNR_NAME" 2>/dev/null || true
 echo ""
 echo "Build complete!"
 echo ""
-echo "Image: ${IMAGE_NAME}:${VERSION}"
+echo "Images:"
+echo "  ${IMAGE_NAME}:${VERSION}"
+echo "  ${IMAGE_NAME}:latest"
 echo ""
 echo "To push to registry:"
-echo "  buildah login ${REGISTRY}"
 echo "  buildah push ${IMAGE_NAME}:${VERSION} docker://${IMAGE_NAME}:${VERSION}"
 echo "  buildah push ${IMAGE_NAME}:latest docker://${IMAGE_NAME}:latest"
