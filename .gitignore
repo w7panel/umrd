@@ -76,3 +76,7 @@ Thumbs.db
 # Sensitive files (DO NOT COMMIT)
 gitconfig.yaml
 registryconfig.yaml
+
+# Config files (contain secrets)
+gitconfig.yaml
+registryconfig.yaml
