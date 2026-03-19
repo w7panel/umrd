@@ -995,8 +995,6 @@ def ensure_zram(comp_alg=None, use_emm_zram=False,
     if os.system('mkswap /dev/zram0'):
         LOGGER.warning('mkswap /dev/zram0 failed, skipping zram swap setup')
         return
-    os.system('swapon --version')
-    os.system('swapon -s')
     if os.system('swapon -p 10 /dev/zram0'):
         LOGGER.warning('swapon /dev/zram0 failed')
         return
