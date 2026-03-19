@@ -17,8 +17,6 @@ RUN pip install --no-cache-dir umrd-*.whl
 
 RUN mkdir -p /run/umrd
 
-COPY service/umrd.service /etc/systemd/system/ 2>/dev/null || true
-
 ENV PYTHONUNBUFFERED=1
 
 ENTRYPOINT ["python3", "-m", "umrd"]

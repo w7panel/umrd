@@ -26,7 +26,6 @@ spec:
         command: ["python3", "-m", "umrd"]
         args:
         - "--mode=2"
-        - "--standalone-cgroup"
         - "--swapout-limit=0.6"
         - "--pct-trigger-reclaim=0.6"
         - "--cpu-quota-ratio=0.05"
