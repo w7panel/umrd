@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 #
-# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) Tencent, Inc. and its affiliates.
+#
+# This software may be used and distributed according to the terms of the
+# GNU General Public License version 2.
 
 # Note: UMRD needs to answer two questions: how much memory to offload
 # and what memory to offload.
@@ -56,15 +59,15 @@ PARSER.add_argument('--comp-alg', type=str, default='lzo-rle',
                     help='The compressed algorithm used in zram device.')
 
 # allowlist. e.g., /tmp/allowlist. The content is like:
-#   /sys/fs/cgroup/kubepods/burstable/pod1
-#   /sys/fs/cgroup/kubepods/burstable/pod2
+#   /sys/fs/cgroup/memory/sub_cgroup_1
+#   /sys/fs/cgroup/memory/sub_cgroup_2
 # if parent cgroup and child cgroup are both in allowlist, only keeps parent cgroup in the list
 PARSER.add_argument('--allowlist', type=str, default='/run/umrd/allowlist.cfg',
                     help='Allowlist file path, one cgroup path per line. '
-                    'If not set, monitor all cgroups.')
+                    'Default empty, allow non cgroup. If set *, allow all cgroups.')
 PARSER.add_argument('--allowlist_oversell', type=str, default='/run/umrd/allowlist_oversell.cfg',
-                    help='Allowlist file path for oversell. '
-                    'If not set, monitor all cgroups.')
+                    help='Allowlist file path for oversell, one cgroup path per line. '
+                    'Default empty, allow non cgroup. If set *, allow all cgroups.')
 # blocklist
 PARSER.add_argument('--blocklist', type=str, default='/run/umrd/blocklist.cfg',
                     help='Blocklist file path, one cgroup path per line. '
@@ -86,6 +89,8 @@ The agent is able to reclaim in different modes.
     1: reclaim root cgroup;
     2: reclaim all cgroups;
 """)
+PARSER.add_argument('--standalone-cgroup', action='store_true',
+                    help='Create a standalone cgroup for UMRD process.')
 PARSER.add_argument('--oneshot', action='store_true',
                     help='(Debug) Run the reclaim cycle only once.')
 PARSER.add_argument('--always-defaults', action='store_true',

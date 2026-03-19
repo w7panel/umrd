@@ -231,6 +231,8 @@ echo "log_file_handler_level=debug" > /run/umrd/hot_reload.cfg
 | `--oneshot` | false | 只运行一次回收 (调试用) |
 | `--profile` | false | 启用性能分析 (调试用) |
 
+**注意**: `--standalone-cgroup` 参数已被移除（从未实现）。
+
 ---
 
 ## 输出文件
