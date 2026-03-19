@@ -45,7 +45,8 @@ def cg_memory_current(path):
         with open(os.path.join(path, CGROUP_MEMORY_CURRENT), 'r') as f:
             val = f.read().strip()
             return int(val) if val != 'max' else MAXMEMLIMIT
-    except:
+    except (IOError, OSError, ValueError) as e:
+        LOGGER.debug('cg_memory_current failed for %s: %s', path, e)
         return 0
 
 def cg_memory_max(path):
@@ -54,7 +55,8 @@ def cg_memory_max(path):
         with open(os.path.join(path, CGROUP_MEMORY_MAX), 'r') as f:
             val = f.read().strip()
             return int(val) if val != 'max' else MAXMEMLIMIT
-    except:
+    except (IOError, OSError, ValueError) as e:
+        LOGGER.debug('cg_memory_max failed for %s: %s', path, e)
         return MAXMEMLIMIT
 
 def cg_memory_stat(path):
@@ -67,7 +69,8 @@ def cg_memory_stat(path):
                 if len(parts) == 2:
                     stat[parts[0].encode()] = parts[1]
         return stat
-    except:
+    except (IOError, OSError) as e:
+        LOGGER.debug('cg_memory_stat failed for %s: %s', path, e)
         return {}
 
 def cg_has_interface(path, iface):
@@ -78,7 +81,8 @@ def cg_write_value(path, iface, value):
         with open(os.path.join(path, iface), 'w') as f:
             f.write(str(value))
         return True
-    except:
+    except (IOError, OSError, PermissionError) as e:
+        LOGGER.debug('cg_write_value failed for %s/%s: %s', path, iface, e)
         return False
 
 def cg_try_reclaim(path, target_bytes):
@@ -703,14 +707,15 @@ def parse_textinfo(path: str):
     info = {}
     try:
         info_fd = os.open(path, os.O_RDONLY, 0o0400)
-        # Assuming read files won't exceed 4096 chars
-        info_read = os.read(info_fd, 4096)
-        os.close(info_fd)
+        try:
+            info_read = os.read(info_fd, 4096)
+        finally:
+            os.close(info_fd)
         return dict(
             (tok[0], tok[1]) for tok in [line.split() for line in info_read.splitlines()]
         )
-    except:
-        pass
+    except (IOError, OSError) as e:
+        LOGGER.debug('parse_textinfo failed for %s: %s', path, e)
     return info
 
 def get_kernel_version():
@@ -726,8 +731,8 @@ def enable_lru_gen():
     try:
         with open('/sys/kernel/mm/lru_gen/enabled', 'wb') as _f:
             _f.write(b'Y')
-    except:
-        LOGGER.info('enable lru_gen failed')
+    except (IOError, OSError, PermissionError) as e:
+        LOGGER.info('enable lru_gen failed: %s', e)
         sys.exit(1)
 
 def enable_wujing():
@@ -738,8 +743,8 @@ def enable_wujing():
     try:
         with open('/proc/sys/vm/wujing_enable', 'wb') as _f:
             _f.write(b'1')
-    except:
-        LOGGER.info('enable wujing failed')
+    except (IOError, OSError, PermissionError) as e:
+        LOGGER.info('enable wujing failed: %s', e)
         sys.exit(1)
 
 def set_totalram_pages():
@@ -858,7 +863,7 @@ def check_loop_dev(disk_path):
         with open('/sys/block/loop0/loop/backing_file', 'rb') as _f:
             loop0_backfile = _f.readline().decode('utf-8').strip()
         if loop0_backfile == disk_path:
-            if os.path.exist(disk_path):
+            if os.path.exists(disk_path):
                 return True
             if os.system('losetup -d /dev/loop0 >/dev/null 2>&1'):
                 raise Exception('losetup -d /dev/loop0 failed')
@@ -1101,9 +1106,16 @@ def get_zram(zrampath='/sys/block/zram0/mm_stat'):
     if not os.path.exists(zrampath):
         return None, None
 
-    with open(zrampath, 'rb') as _f:
-        stats = _f.readline().split()
-        return int(stats[0]), int(stats[1])
+    try:
+        with open(zrampath, 'rb') as _f:
+            stats = _f.readline().split()
+            if len(stats) < 2:
+                LOGGER.debug('get_zram: malformed mm_stat at %s', zrampath)
+                return None, None
+            return int(stats[0]), int(stats[1])
+    except (IOError, OSError, ValueError) as e:
+        LOGGER.debug('get_zram failed: %s', e)
+        return None, None
 
 
 def set_log_level(handler: Handler, mode: str):

@@ -337,10 +337,10 @@ class CgroupTree:
         with open(self.conf.hot_reload, 'r') as _f:
             for l in _f.readlines():
                 if '=' in l:
-                    k, v = l.split('=')
+                    k, v = l.split('=', 1)
                     k = k.strip()
                     v = v.strip()
-                hot_conf[k] = v
+                    hot_conf[k] = v
             if 'log_file_handler_level' in hot_conf:
                 set_log_level(self.conf.log_file_handler, hot_conf['log_file_handler_level'])
             if 'log_console_handler_level' in hot_conf:

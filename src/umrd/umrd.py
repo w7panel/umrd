@@ -181,8 +181,8 @@ class UMRD:
         try:
             with open(os.path.join(CGROUP_CPU_PATH, 'cgroup.procs'), 'wb') as _f:
                 _f.write(str(self.pid).encode('ascii'))
-        except:
-            LOGGER.info('Failed to migrate umrd process to cpu root cgroup.')
+        except (IOError, OSError) as e:
+            LOGGER.info('Failed to migrate umrd process to cpu root cgroup: %s', e)
 
         if os.path.exists(self.cpu_cgroup):
             with open(self.cpu_cgroup + '/cgroup.procs', 'rb') as _f:
@@ -209,8 +209,8 @@ class UMRD:
         try:
             with open(os.path.join(CGROUP_V2_ROOT, 'cgroup.procs'), 'wb') as _f:
                 _f.write(str(self.pid).encode('ascii'))
-        except:
-            LOGGER.info('Failed to migrate umrd process to root cgroup.')
+        except (IOError, OSError) as e:
+            LOGGER.info('Failed to migrate umrd process to root cgroup: %s', e)
         with open(os.path.join(self.mem_cgroup, 'cgroup.procs'), 'rb') as _f:
             procs = _f.readlines()
         if len(procs) == 0:
@@ -281,7 +281,8 @@ class UMRD:
                     'AccumReclaimAnon: 0 KB\nAccumReclaimFile: 0 KB\n' + \
                     'LastReclaimTimestamp: 0 s\nLastReclaimCost: 0 s\n'
                 s = s % (self.pid, self.cgtree.conf.boot_timestamp)
-            except:
+            except (ValueError, TypeError) as e:
+                LOGGER.debug('Failed to format umrd_status, using error status: %s', e)
                 s = 'Pid: -\nStatus: Active(Error)\nBootTimestamp: 0 s\n' + \
                     'AccumReclaimSimple: 0 KB\n' + \
                     'AccumReclaimAnon: 0 KB\nAccumReclaimFile: 0 KB\n' + \
@@ -346,7 +347,8 @@ class UMRD:
                                 self.cgtree.accum_reclaim_anon, \
                                 self.cgtree.accum_reclaim_file, \
                                 curr_time, cost_time)
-                    except:
+                    except (ValueError, TypeError) as e:
+                        LOGGER.debug('Failed to format umrd_status: %s', e)
                         s = 'Pid: -\nStatus: Active(Error)\nBootTimestamp: 0 s\n' + \
                             'AccumReclaimSimple: 0 KB\n' + \
                             'AccumReclaimAnon: 0 KB\nAccumReclaimFile: 0 KB\n' + \
@@ -447,7 +449,7 @@ class UMRD:
                 return HIGH_UTIL
 
         if not self.check_feasibility():
-            LOGGER.info('UMRD process pressure is too hign, skipping reclaim cycle.')
+            LOGGER.info('UMRD process pressure is too high, skipping reclaim cycle.')
             return LOW_UTIL
 
         try:

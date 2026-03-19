@@ -77,8 +77,8 @@ class CgroupStat:
                 self.memtotal = memtotal
             self.current = cg_memory_current(self.path)
             self.memfree = self.memtotal - self.current
-        except:
-            pass
+        except (IOError, OSError, ValueError) as e:
+            LOGGER.debug('update_stat memory read failed for %s: %s', self.path, e)
 
         ret = cg_memory_stat(self.path)
         try:
@@ -92,8 +92,8 @@ class CgroupStat:
             self.inactive_file = self.total_inactive_file
             self.cur_total_lru = self.active_anon + self.inactive_anon + \
                                     self.active_file + self.inactive_file
-        except:
-            pass
+        except (ValueError, TypeError) as e:
+            LOGGER.debug('update_stat stat parse failed for %s: %s', self.path, e)
 
         return ret
 
@@ -142,9 +142,11 @@ class CgroupStat:
                     str_line = line.strip()
                     if str_line.find(b'node') < 0:
                         str_line = str_line.split()
-                        total_anon += int(str_line[-2])
-                        total_file += int(str_line[-1])
-        except:
+                        if len(str_line) >= 2:
+                            total_anon += int(str_line[-2])
+                            total_file += int(str_line[-1])
+        except (ValueError, IndexError) as e:
+            LOGGER.debug('update_lru_gen parse failed for %s: %s', self.path, e)
             self.emm_anon_cold = self.total_inactive_anon
             self.emm_anon_total = self.total_inactive_anon + self.total_active_anon
             self.emm_file_cold = self.total_inactive_file
@@ -172,15 +174,15 @@ class CgroupStat:
                 if cg_has_interface(self.path, 'memory.swap.current'):
                     with open(os.path.join(self.path, 'memory.swap.current'), 'r') as f:
                         swap_current = int(f.read().strip())
-            except:
-                pass
+            except (IOError, OSError, ValueError) as e:
+                LOGGER.debug('update_usage swap_current read failed for %s: %s', self.path, e)
 
             self.memsw_usage = self.current + swap_current
 
-        except Exception:
+        except Exception as e:
             self.current = 0
             self.memsw_usage = 0
-            LOGGER.info('%s CgroupStat update_usage failed', self.path)
+            LOGGER.info('%s CgroupStat update_usage failed: %s', self.path, e)
 
         self.swapout = int(max(0, swap_current) / ((1 - self.compr_ratio) or 1))
 
@@ -298,8 +300,8 @@ class CgroupZramStat(CgroupStat):
             zram_stat = cg_get_zram_stat(self.path)
             self.zram_raw_in_bytes = zram_stat.get('raw', 0)
             self.zram_usage_in_bytes = zram_stat.get('usage', 0)
-        except:
-            LOGGER.info('%s CgroupZramStat update_usage failed', self.path)
+        except Exception as e:
+            LOGGER.info('%s CgroupZramStat update_usage failed: %s', self.path, e)
 
     def update_compr_ratio(self, _root_compr_ratio: float):
         if self.zram_raw_in_bytes == 0:
@@ -320,7 +322,8 @@ class CgroupZramStat(CgroupStat):
             ws_refault_distance = min(ws_refault_distance, self.memtotal)
             val = (ws_refault_distance + ws_valid_eviction) / 2
             self.file_save = min(val, max_file_save)
-        except:
+        except (KeyError, ValueError, TypeError) as e:
+            LOGGER.debug('update_file_save failed for %s: %s', self.path, e)
             super().update_file_save(ret)
 
 class CGroup(abc.ABC):
@@ -598,11 +601,14 @@ class SimpleCgroup(BasicCgroup):
         self.last_scan_time = curr_time
         try:
             psi_fd = os.open(os.path.join(self.path, 'memory.pressure'), os.O_RDONLY, 0o400)
-            some = os.read(psi_fd, 128).splitlines()[0].replace(b'=', b' ').split()
-            os.close(psi_fd)
-            self.total_history.append(int(some[8]))
-        except:
-            pass
+            try:
+                some = os.read(psi_fd, 128).splitlines()[0].replace(b'=', b' ').split()
+                if len(some) > 8:
+                    self.total_history.append(int(some[8]))
+            finally:
+                os.close(psi_fd)
+        except (IOError, OSError, IndexError, ValueError) as e:
+            LOGGER.debug('refresh_statistic PSI read failed for %s: %s', self.path, e)
 
         self.cgstat.update_stat()
 
