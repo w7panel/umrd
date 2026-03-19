@@ -86,7 +86,7 @@ args:
 |------|------|
 | `simple` | 直接回收 |
 | `emm` | 基于页龄回收 (需内核支持) |
-| `emm-compat` | EMM + 自动 fallback |
+| `emm-compat` | EMM + 自动 fallback 到 simple |
 
 ## 输出文件
 

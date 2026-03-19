@@ -231,7 +231,7 @@ echo "log_file_handler_level=debug" > /run/umrd/hot_reload.cfg
 | `--oneshot` | false | 只运行一次回收 (调试用) |
 | `--profile` | false | 启用性能分析 (调试用) |
 
-**注意**: `--standalone-cgroup` 参数已被移除（从未实现）。
+**注意**: `--standalone-cgroup` 参数已被移除。
 
 ---
 
@@ -294,7 +294,7 @@ args:
 - "--swapout-limit=0.6"         # swapout 超过 60% 时优先回收文件页
 - "--pct-trigger-reclaim=0.6"    # 内存使用 60% 时触发回收
 - "--cpu-quota-ratio=0.05"      # UMRD 限制 5% CPU
-- "--reclaim-mode=emm"          # 使用 EMM 回收模式
+- "--reclaim-mode=emm-compat"  # EMM + fallback to simple
 - "--interval-anon=10"           # 匿名页回收间隔 10 秒
 - "--ratio-anon=0.0002"         # 每次回收匿名页的 0.02%
 - "--ratio-file=0"              # 不回收文件页
@@ -312,10 +312,11 @@ args:
 # 构建 wheel 包
 ./scripts/build.sh
 
-# 构建 OCI 镜像 (使用 buildah)
+# 或单独构建镜像
 ./scripts/build-image.sh
 
 # 推送镜像
+buildah push zpk.idc.w7.com/w7panel/umrd:2.0.0 docker://zpk.idc.w7.com/w7panel/umrd:2.0.0
 buildah push zpk.idc.w7.com/w7panel/umrd:latest docker://zpk.idc.w7.com/w7panel/umrd:latest
 ```
 
@@ -339,7 +340,6 @@ umrd/
 │   └── daemonset.yaml
 ├── scripts/               # 构建脚本
 ├── Dockerfile             # Docker 镜像
-├── Containerfile          # OCI 镜像
 ├── pyproject.toml         # 项目配置
 ├── install.sh             # 一键安装脚本
 └── README.md
