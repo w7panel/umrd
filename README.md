@@ -1,7 +1,7 @@
 # UMRD - Userspace Memory Reclaimer Daemon
 
 **版本**: 2.0.0  <!请在 pyproject.toml 中修改版本号 -->
-**License**: Apache-2.0  
+**License**: [Apache-2.0](LICENSE)  
 **cgroup支持**: 仅 cgroup v2
 
 ---
@@ -459,3 +459,10 @@ buildah push zpk.idc.w7.com/w7panel/umrd:latest docker://zpk.idc.w7.com/w7panel/
 # 4. 推送代码
 git add -A && git commit -m "release: v2.0.0" && git push
 ```
+
+---
+
+## License
+
+本项目基于 [Apache License 2.0](LICENSE) 开源。
+
