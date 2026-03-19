@@ -377,3 +377,58 @@ cat /sys/block/zram0/mm_stat
 | ZRAM 未启用 | 内核不支持 | 检查内核模块 |
 | 日志无输出 | quiet 模式 | 添加 `--verbose` 参数 |
 | mem_save 数据异常 | cgroup v2 重复计算 | 已修复 v2.0.0 版本 |
+
+---
+
+## 安装
+
+### Kubernetes (推荐)
+
+```bash
+# 部署
+kubectl apply -f k8s/daemonset.yaml
+
+# 验证
+kubectl get pods -n kube-system -l app=umrd
+kubectl logs -n kube-system -l app=umrd
+```
+
+### Systemd
+
+```bash
+# 克隆并安装
+git clone https://github.com/w7panel/umrd.git
+cd umrd
+sudo ./install.sh
+
+# 验证
+systemctl status umrd
+cat /run/umrd/status
+```
+
+### 源码安装
+
+```bash
+git clone https://github.com/w7panel/umrd.git
+cd umrd
+pip install .
+```
+
+## 发布
+
+版本号在 `src/umrd/_version.py` 中定义。
+
+```bash
+# 1. 修改版本号
+vim src/umrd/_version.py
+
+# 2. 构建（自动更新文档）
+./scripts/build.sh
+
+# 3. 推送镜像
+buildah push zpk.idc.w7.com/w7panel/umrd:2.0.0 docker://zpk.idc.w7.com/w7panel/umrd:2.0.0
+buildah push zpk.idc.w7.com/w7panel/umrd:latest docker://zpk.idc.w7.com/w7panel/umrd:latest
+
+# 4. 推送代码
+git add -A && git commit -m "release: v2.0.0" && git push
+```

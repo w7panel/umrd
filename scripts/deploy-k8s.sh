@@ -5,27 +5,12 @@
 
 set -e
 
-NAMESPACE=${NAMESPACE:-umrd-system}
-IMAGE=${IMAGE:-w7panel/umrd:latest}
+NAMESPACE=${NAMESPACE:-kube-system}
+IMAGE=${IMAGE:-zpk.idc.w7.com/w7panel/umrd:latest}
 
 echo "Deploying UMRD to Kubernetes..."
 
-# Build and load image (for kind/minikube)
-if [[ "$1" == "--kind" ]]; then
-    echo "Building image for kind..."
-    ./scripts/build-docker.sh
-    kind load docker-image ${IMAGE}
-fi
-
-# Apply manifests
-echo "Creating namespace..."
 kubectl apply -f k8s/daemonset.yaml
-
-# Patch image if custom
-if [[ "$IMAGE" != "w7panel/umrd:latest" ]]; then
-    echo "Patching image to ${IMAGE}..."
-    kubectl set image daemonset/umrd umrd=${IMAGE} -n ${NAMESPACE}
-fi
 
 echo ""
 echo "UMRD deployed to namespace: ${NAMESPACE}"

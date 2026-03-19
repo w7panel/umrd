@@ -3,9 +3,6 @@ FROM python:3.11-slim
 LABEL maintainer="w7panel"
 LABEL description="Userspace Memory Reclaimer Daemon"
 
-ARG VERSION=2.0.0
-ARG BUILD_DATE
-
 RUN apt-get update && apt-get install -y --no-install-recommends \
     kmod \
     && rm -rf /var/lib/apt/lists/*
