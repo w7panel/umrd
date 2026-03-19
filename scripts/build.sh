@@ -37,6 +37,8 @@ buildah config --label maintainer="w7panel" "$CTR"
 buildah config --label description="Userspace Memory Reclaimer Daemon" "$CTR"
 buildah config --env PYTHONUNBUFFERED=1 "$CTR"
 
+buildah run "$CTR" -- bash -c 'apt-get update && apt-get install -y --no-install-recommends kmod && rm -rf /var/lib/apt/lists/*'
+
 MOUNT=$(buildah mount "$CTR")
 mkdir -p "$MOUNT/app"
 

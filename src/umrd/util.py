@@ -827,9 +827,12 @@ def init_wujing(ver, use_emm_zram):
 
 def remodprobe_default_zram(comp_alg=None):
     LOGGER.debug('Resetting zram...')
-    LOGGER.debug('  >>> modprobe -r zram')
-    if os.system('modprobe -r zram'):
-        LOGGER.info('cannot remove zram')
+    if check_zram():
+        LOGGER.debug('zram in use, skipping modprobe -r')
+    else:
+        LOGGER.debug('  >>> modprobe -r zram')
+        if os.system('modprobe -r zram'):
+            LOGGER.debug('cannot remove zram, continuing...')
 
     LOGGER.debug('  >>> modprobe zram num_devices=1')
     if os.system('modprobe zram num_devices=1'):
@@ -837,9 +840,12 @@ def remodprobe_default_zram(comp_alg=None):
 
 def remodprobe_emm_zram(comp_alg=None):
     LOGGER.debug('Resetting zram...')
-    LOGGER.debug('  >>> modprobe -r emm_zram')
-    if os.system('modprobe -r emm_zram'):
-        LOGGER.info('cannot remove emm_zram')
+    if check_zram():
+        LOGGER.debug('zram in use, skipping modprobe -r')
+    else:
+        LOGGER.debug('  >>> modprobe -r emm_zram')
+        if os.system('modprobe -r emm_zram'):
+            LOGGER.debug('cannot remove emm_zram, continuing...')
     if os.system('modprobe emm_zram'):
         LOGGER.warning('cannot modprobe emm_zram, zram may not be available')
 
