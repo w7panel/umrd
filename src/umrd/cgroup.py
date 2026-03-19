@@ -413,7 +413,14 @@ class BasicCgroup(CGroup):
             child.set_zram_priority(zram_priority)
 
     def get_memsaving_recursive(self, compr_ratio: float):
-        return 0, 0, 0, 0
+        memtotal, memsw_usage, anon_save, file_save = 0, 0, 0, 0
+        for child in self.children.values():
+            (c, m, a, f) = child.get_memsaving_recursive(compr_ratio)
+            memtotal += c
+            memsw_usage += m
+            anon_save += a
+            file_save += f
+        return memtotal, memsw_usage, anon_save, file_save
 
     def get_normalized_file_save(self, file_save_ratio: float, compr_ratio: float):
         """
@@ -527,14 +534,29 @@ class SimpleCgroup(BasicCgroup):
         self.cgstat.update_usage()
 
     def get_memsaving_recursive(self, compr_ratio: float):
-        self.cgstat.update_usage()
-        stat = self.cgstat.update_stat()
-        self.cgstat.update_compr_ratio(compr_ratio)
-        self.cgstat.update_anon_save()
-        self.cgstat.update_file_save(stat)
+        # Recursively collect stats from all descendant cgroups
+        memtotal, memsw_usage, anon_save, file_save = 0, 0, 0, 0
 
-        return (self.cgstat.memtotal, self.cgstat.memsw_usage,
-                self.cgstat.anon_save, self.cgstat.file_save)
+        # In cgroup v2, memory.current includes children's memory.
+        # Only collect stats from leaf nodes (no monitored children).
+        for child in self.children.values():
+            (c, m, a, f) = child.get_memsaving_recursive(compr_ratio)
+            memtotal += c
+            memsw_usage += m
+            anon_save += a
+            file_save += f
+
+        if not self.children:
+            self.cgstat.update_usage()
+            stat = self.cgstat.update_stat()
+            self.cgstat.update_compr_ratio(compr_ratio)
+            self.cgstat.update_anon_save()
+            self.cgstat.update_file_save(stat)
+
+            return (self.cgstat.memtotal, self.cgstat.memsw_usage,
+                    self.cgstat.anon_save, self.cgstat.file_save)
+
+        return memtotal, memsw_usage, anon_save, file_save
 
     # Cgroupfs IO
     def do_reclaim(self, reclaim_mem: int):

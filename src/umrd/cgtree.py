@@ -241,6 +241,16 @@ class CgroupTree:
                 else:
                     self.roots[mnt_point] = create_cgroup(self, mnt_point, rule, rule.params, True)
 
+        # Add ALLOWED paths from path_tree as roots
+        for path, rule in self.path_tree.items():
+            if rule.type == ALLOWED and path not in self.roots:
+                if os.path.isdir(path):
+                    cgroup = prev_cgroups.get(path)
+                    if cgroup and cgroup.rule == rule:
+                        self.roots[path] = cgroup
+                    else:
+                        self.roots[path] = create_cgroup(self, path, rule, rule.params, False)
+
 
     def check_lru(self):
         if not os.path.exists('/sys/kernel/mm/lru_gen/enabled'):
