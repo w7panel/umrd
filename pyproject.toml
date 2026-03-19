@@ -1,10 +1,10 @@
 [build-system]
-requires = ["setuptools>=61.0", "wheel"]
+requires = ["setuptools>=61.0", "wheel", "setuptools_scm>=6.2"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "umrd"
-version = "2.0.0"
+dynamic = ["version"]
 description = "Userspace Memory Reclaimer Daemon"
 readme = "README.md"
 license = {text = "Apache-2.0"}
@@ -67,3 +67,6 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 addopts = "-v"
+
+[tool.setuptools_scm]
+version_file = "src/umrd/_version.py"

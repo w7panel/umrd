@@ -7,7 +7,8 @@ import argparse
 from logging import handlers, Handler
 from typing import NamedTuple, Dict
 
-UMRD_VERSION = "2.0.0"
+from ._version import __version__
+UMRD_VERSION = __version__
 PAGESIZE = mmap.PAGESIZE
 
 LOGGER = logging.getLogger('umrd')

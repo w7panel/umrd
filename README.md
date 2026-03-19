@@ -1,6 +1,6 @@
 # UMRD - Userspace Memory Reclaimer Daemon
 
-**版本**: 2.0.0  
+**版本**: 2.0.0  <!-- 请在 src/umrd/_version.py 中修改版本号 -->
 **License**: Apache-2.0  
 **cgroup支持**: 仅 cgroup v2
 

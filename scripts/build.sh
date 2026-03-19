@@ -7,7 +7,7 @@ set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
-VERSION=$(grep '^version = ' "$PROJECT_DIR/pyproject.toml" | cut -d'"' -f2)
+VERSION=$(grep '__version__' "$PROJECT_DIR/src/umrd/_version.py" | cut -d'"' -f2)
 REGISTRY=${REGISTRY:-zpk.idc.w7.com}
 IMAGE_NAME=${IMAGE_NAME:-zpk.idc.w7.com/w7panel/umrd}
 CTNR_NAME="umrd-build-$$"
@@ -15,6 +15,7 @@ CTNR_NAME="umrd-build-$$"
 echo "Building UMRD v${VERSION}..."
 
 cd "$PROJECT_DIR"
+./scripts/update-version.sh
 rm -rf build/ dist/
 
 echo ""
