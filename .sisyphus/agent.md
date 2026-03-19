@@ -1,4 +1,4 @@
-# UMRD 开发规范
+# UMRD Agent 开发规范
 
 ## 1. 项目概述
 
@@ -157,6 +157,8 @@ some_list.append(value)  # type: ignore
 - `docs`: 文档
 - `refactor`: 重构
 - `perf`: 性能
+- `k8s`: Kubernetes 相关
+- `build`: 构建相关
 
 ### 5.2 分支
 
@@ -181,20 +183,17 @@ main     # 主分支
    - `src/umrd/util.py`: `UMRD_VERSION = "x.y.z"`
    - `README.md`: `**版本**: x.y.z`
 
-2. 构建 wheel
+2. 构建镜像
    ```bash
-   python3 -m venv build-env
-   source build-env/bin/activate
-   pip install build wheel
-   python3 -m build --wheel
+   buildah bud --tag zpk.idc.w7.com/w7panel/umrd:2.0.0
+   buildah push zpk.idc.w7.com/w7panel/umrd:2.0.0
    ```
 
-3. 提交并打标签
+3. 提交并推送
    ```bash
    git add -A
    git commit -m "release: vx.y.z"
-   git tag vx.y.z
-   git push origin main --tags
+   git push origin main
    ```
 
 ## 7. 测试清单
@@ -205,6 +204,7 @@ main     # 主分支
 - [ ] 模块导入: `python3 -c "from umrd import *"`
 - [ ] CLI 帮助: `umrd --help`
 - [ ] Wheel 构建成功
+- [ ] 镜像构建成功
 - [ ] 无 v1 路径遗留: `grep -r "cgroup/memory" .`
 - [ ] 版本号一致
 
@@ -234,3 +234,54 @@ main     # 主分支
 | 日志 | `/run/umrd/umrd.log` |
 | 状态 | `/run/umrd/status` |
 | 环境配置 | `/etc/umrd/umrd.env` |
+
+## 10. K8s DaemonSet 配置
+
+当前 DaemonSet 参数:
+
+```yaml
+args:
+- "--mode=2"                    # 回收所有 cgroup
+- "--swapout-limit=0.6"         # swapout 超过 60% 时优先回收文件页
+- "--pct-trigger-reclaim=0.6"    # 内存使用 60% 时触发回收
+- "--cpu-quota-ratio=0.05"      # UMRD 限制 5% CPU
+- "--reclaim-mode=emm-compat"   # EMM + Simple fallback
+- "--interval-anon=10"           # 匿名页回收间隔 10 秒
+- "--ratio-anon=0.0002"         # 每次回收匿名页的 0.02%
+- "--ratio-file=0"              # 不回收文件页
+- "--open-zram"                 # 启用 ZRAM 压缩
+- "--quiet"                     # 静默模式 (ERROR 级别)
+```
+
+### 回收模式说明
+
+| 模式 | 说明 |
+|------|------|
+| `simple` | 直接回收内存 |
+| `emm` | 基于年龄的内存回收 (需要内核支持) |
+| `emm-compat` | EMM + fallback 到 simple |
+
+### mem_save 字段说明
+
+```
+total mem: 1056684392 kb        # 物理内存总量
+total swap: 1065072992 kb       # Swap 总量
+anon save: 339968 bytes          # 匿名页节省量 (ZRAM 压缩)
+file save: 3130462208 bytes      # 文件页节省量 (可回收)
+max memusage: 413556711424 bytes # 最大内存使用量估算
+save ratio: 0.76 %               # 节省比例
+savepage limit: 1082044817408 bytes  # 回收限制
+totalused memory: 740154490880 bytes  # 当前已用内存
+```
+
+### status 字段说明
+
+```
+Pid: 3704302                    # UMRD 进程 PID
+Status: Active(Running)         # 运行状态
+BootTimestamp: 1773898934 s     # 启动时间戳
+AccumReclaimAnon: 0 KB          # 累计回收匿名页
+AccumReclaimFile: 0 KB          # 累计回收文件页
+LastReclaimTimestamp: 0 s        # 上次回收时间
+LastReclaimCost: 0 s             # 上次回收耗时
+```
