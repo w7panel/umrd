@@ -1,3 +1,0 @@
-# UMRD - Userspace Memory Reclaimer Daemon
-# Runtime dependencies (none required)
-# All dependencies are optional and handled at runtime

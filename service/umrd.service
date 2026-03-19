@@ -9,14 +9,13 @@ Environment="PYTHONUNBUFFERED=1"
 EnvironmentFile=-/etc/umrd/umrd.env
 ExecStartPre=/usr/bin/mkdir -p /run/umrd
 ExecStart=/usr/bin/python3 -m umrd \
-    --standalone-cgroup \
     --swapout-limit=0.6 \
     --pct-trigger-reclaim=0.6 \
     --cpu-quota-ratio=0.05 \
     --scan-interval=5 \
     --mode=2 \
     --swappiness=60 \
-    --reclaim-mode=emm \
+    --reclaim-mode=emm-compat \
     --interval-anon=10 \
     --ratio-anon=0.0002 \
     --ratio-file=0 \
