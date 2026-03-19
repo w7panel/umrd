@@ -785,9 +785,9 @@ def modprobe_emm_modules():
     for module in emm_modules:
         if module.encode('ascii') in installed_modules:
             continue
-        cmd = 'modprobe %s' % module
+        cmd = 'modprobe %s >/dev/null 2>&1' % module
         if os.system(cmd):
-            LOGGER.info(cmd + ' failed')
+            LOGGER.info('modprobe %s failed', module)
             sys.exit(1)
 
 def set_swapcache_fastfree():
@@ -832,24 +832,17 @@ def remodprobe_default_zram(comp_alg=None):
     if check_zram():
         LOGGER.debug('zram in use, skipping modprobe -r')
     else:
-        LOGGER.debug('  >>> modprobe -r zram')
-        if os.system('modprobe -r zram'):
-            LOGGER.debug('cannot remove zram, continuing...')
+        os.system('modprobe -r zram >/dev/null 2>&1')
 
-    LOGGER.debug('  >>> modprobe zram num_devices=1')
-    if os.system('modprobe zram num_devices=1'):
-        LOGGER.warning('cannot modprobe zram, zram may not be available')
+    os.system('modprobe zram num_devices=1 >/dev/null 2>&1')
 
 def remodprobe_emm_zram(comp_alg=None):
     LOGGER.debug('Resetting zram...')
     if check_zram():
         LOGGER.debug('zram in use, skipping modprobe -r')
     else:
-        LOGGER.debug('  >>> modprobe -r emm_zram')
-        if os.system('modprobe -r emm_zram'):
-            LOGGER.debug('cannot remove emm_zram, continuing...')
-    if os.system('modprobe emm_zram'):
-        LOGGER.warning('cannot modprobe emm_zram, zram may not be available')
+        os.system('modprobe -r emm_zram >/dev/null 2>&1')
+    os.system('modprobe emm_zram >/dev/null 2>&1')
 
 def check_loop_dev(disk_path):
     '''
@@ -867,7 +860,7 @@ def check_loop_dev(disk_path):
         if loop0_backfile == disk_path:
             if os.path.exist(disk_path):
                 return True
-            if os.system('losetup -d /dev/loop0'):
+            if os.system('losetup -d /dev/loop0 >/dev/null 2>&1'):
                 raise Exception('losetup -d /dev/loop0 failed')
             return False
         else:
@@ -881,23 +874,21 @@ def create_empty_dev(disk_path, disk_size):
         if disk_stat_blknum == disk_size:
             return
 
-        LOGGER.info('  >>> rm %s', disk_path)
         rm_flag = True
         for _ in range(3):
             if not os.path.exists(disk_path):
                 rm_flag = False
                 break
-            if not os.system('rm %s' % disk_path):
+            if not os.system('rm %s >/dev/null 2>&1' % disk_path):
                 rm_flag = False
                 break
             time.sleep(1)
         if rm_flag:
             raise Exception('rm %s failed' % disk_path)
 
-    LOGGER.info('  >>> fallocate -l %sM %s', disk_size, disk_path)
     alloc_flag = True
     for _ in range(3):
-        if not os.system('fallocate -l %sM %s' % (disk_size, disk_path)):
+        if not os.system('fallocate -l %sM %s >/dev/null 2>&1' % (disk_size, disk_path)):
             alloc_flag = False
             break
         time.sleep(1)
@@ -911,13 +902,11 @@ def create_empty_dev(disk_path, disk_size):
                         (disk_stat_blknum, disk_size))
 
 def set_loop_dev(disk_path, disk_size):
-    LOGGER.info('  >>> losetup --direct-io=on /dev/loop0 %s', disk_path)
     losetup_flag = True
     for i in range(2):
-        if not os.system('losetup --direct-io=on /dev/loop0 %s' % disk_path):
+        if not os.system('losetup --direct-io=on /dev/loop0 %s >/dev/null 2>&1' % disk_path):
             losetup_flag = False
             break
-        LOGGER.info('  round %s: trying losetup...', i + 1)
         time.sleep(1)
     if losetup_flag:
         raise Exception('losetup --direct-io=on /dev/loop0 %s failed' % disk_path)
@@ -933,11 +922,10 @@ def ensure_zram(comp_alg=None, use_emm_zram=False,
     # Force reset even if zram is already in use
     if check_zram():
         LOGGER.info('zram0 already active, forcing reset')
-        os.system('swapoff /dev/zram0 2>/dev/null')
+        os.system('swapoff /dev/zram0 >/dev/null 2>&1')
         time.sleep(1)
 
     for _ in range(3):
-        LOGGER.debug('  >>> echo 1 > /sys/block/zram0/reset')
         try:
             with open('/sys/block/zram0/reset', 'wb') as _f:
                 _f.write(b'1')
@@ -949,12 +937,11 @@ def ensure_zram(comp_alg=None, use_emm_zram=False,
     time.sleep(2)
 
     if comp_alg is not None:
-        LOGGER.debug('  >>> echo %s > /sys/block/zram0/comp_algorithm', comp_alg)
         try:
             with open('/sys/block/zram0/comp_algorithm', 'wb') as _f:
                 _f.write(comp_alg.encode('ascii'))
         except:
-            LOGGER.info('Set zram comp_algorithm as default.')
+            LOGGER.debug('Set zram comp_algorithm as default.')
 
     memtotal = int(get_totalram_pages() / 1024) # KB
 
@@ -967,11 +954,9 @@ def ensure_zram(comp_alg=None, use_emm_zram=False,
                     break
                 create_empty_dev(disk_path, disk_size)
                 set_loop_dev(disk_path, disk_size)
-                LOGGER.debug('  >>> echo /dev/loop0 > /sys/block/zram0/backing_dev')
                 with open('/sys/block/zram0/backing_dev', 'wb') as _f:
                     _f.write(b'/dev/loop0')
 
-                LOGGER.debug('  >>> echo %s > /sys/block/zram0/reject_size', zram_reject_size)
                 with open('/sys/block/zram0/reject_size', 'wb') as _f:
                     _f.write(str(zram_reject_size).encode('ascii'))
                 set_flag = False
@@ -987,15 +972,14 @@ def ensure_zram(comp_alg=None, use_emm_zram=False,
         LOGGER.warning('zram module not loaded, skipping zram setup')
         return
 
-    LOGGER.debug('  >>> echo %s > /sys/block/zram0/disksize', memtotal)
     with open('/sys/block/zram0/disksize', 'wb') as _f:
         _f.write(str(memtotal).encode('ascii'))
     time.sleep(2)
 
-    if os.system('mkswap /dev/zram0'):
+    if os.system('mkswap /dev/zram0 >/dev/null 2>&1'):
         LOGGER.warning('mkswap /dev/zram0 failed, skipping zram swap setup')
         return
-    if os.system('swapon -p 10 /dev/zram0'):
+    if os.system('swapon -p 10 /dev/zram0 >/dev/null 2>&1'):
         LOGGER.warning('swapon /dev/zram0 failed')
         return
 
@@ -1008,10 +992,10 @@ def close_zram(conf: argparse.Namespace):
     conf.open_zram = False
     if check_zram():
         for _ in range(5):
-            if not os.system('swapoff /dev/zram0'):
-                LOGGER.info('  >>> swapoff /dev/zram0 success')
+            if not os.system('swapoff /dev/zram0 >/dev/null 2>&1'):
+                LOGGER.info('swapoff /dev/zram0 success')
                 return
-        LOGGER.error('  >>> swapoff /dev/zram0 failed')
+        LOGGER.error('swapoff /dev/zram0 failed')
 
 
 def get_cpu_util():
