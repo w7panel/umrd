@@ -914,6 +914,22 @@ def set_loop_dev(disk_path, disk_size):
 def ensure_zram(comp_alg=None, use_emm_zram=False,
                 disk_path='/run/umrd/zram.swap',
                 disk_size=0, zram_reject_size=-1):
+    # Check if zram is already properly configured
+    memtotal = int(get_totalram_pages() / 1024) # KB
+    if disk_size != 0:
+        memtotal += disk_size * 1024
+
+    if check_zram():
+        # zram is active, check if disksize matches
+        try:
+            with open('/sys/block/zram0/disksize', 'r') as f:
+                current_disksize = f.read().strip()
+            if current_disksize == '%sK' % memtotal:
+                LOGGER.debug('zram already configured correctly, skipping')
+                return
+        except:
+            pass
+
     if use_emm_zram:
         remodprobe_emm_zram(comp_alg)
     else:
@@ -925,15 +941,18 @@ def ensure_zram(comp_alg=None, use_emm_zram=False,
         os.system('swapoff /dev/zram0 >/dev/null 2>&1')
         time.sleep(1)
 
+    reset_ok = False
     for _ in range(3):
         try:
             with open('/sys/block/zram0/reset', 'wb') as _f:
                 _f.write(b'1')
+            reset_ok = True
+            break
         except Exception as exp:
             LOGGER.debug('reset failed for %s, retrying...', exp)
             time.sleep(2)
-            continue
-        break
+    if not reset_ok:
+        LOGGER.warning('zram reset failed after 3 attempts, continuing anyway')
     time.sleep(2)
 
     if comp_alg is not None:
@@ -964,6 +983,7 @@ def ensure_zram(comp_alg=None, use_emm_zram=False,
             except Exception as exp:
                 LOGGER.info('%s', exp)
         if set_flag:
+            LOGGER.error('zram backing_dev setup failed after 3 attempts, exiting')
             sys.exit(1)
         memtotal += disk_size * 1024
 

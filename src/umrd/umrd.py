@@ -11,7 +11,7 @@ import collections
 
 from .util import LOGGER, ReclaimStat
 from .util import CGROUP_V2_ROOT, CGROUP_CPU_PATH
-from .util import parse_textinfo, get_global_pressure_some_avg10, get_global_pressure_some_total, get_cpu_util, get_zram, ensure_zram
+from .util import parse_textinfo, get_global_pressure_some_avg10, get_global_pressure_some_total, get_cpu_util, get_zram
 from .util import get_curr_time, detect_report_only, cg_memory_current, cg_memory_stat, cg_has_interface
 from .cgtree import CgroupTree
 
@@ -259,7 +259,6 @@ class UMRD:
 
         # each cgroup has its own last_reclaim_time. this var is for the whole.
         last_report_time = 0
-        last_zram_check_time = 0
 
         reclaim_interval = []
         if self.cgtree.conf.reclaim_mode == "simple":
@@ -320,15 +319,6 @@ class UMRD:
                 time.sleep(max(0, self.cycle_sleep - cost_time))
                 continue
 
-            # check zram
-            if self.cgtree.conf.open_zram and \
-                curr_time - last_zram_check_time > self.cgtree.conf.zram_check_interval:
-                last_zram_check_time = curr_time
-                ensure_zram(self.cgtree.conf.comp_alg, \
-                            self.cgtree.conf.use_emm_zram, \
-                            self.cgtree.conf.disk_path, \
-                            self.cgtree.conf.disk_size, \
-                            self.cgtree.conf.zram_reject_size)
             # write global data
             if curr_time - last_report_time > self.cgtree.conf.report_interval:
                 last_report_time = curr_time
@@ -408,7 +398,8 @@ class UMRD:
         self.cgtree.try_update_rules()
         self.cgtree.try_refresh(mode)
 
-        # todo 增加回收周期判断
+        io_some_avg10 = None
+
         if not self.cgtree.conf.disable_oversell and self.cgtree.conf.page_reporting_supported == 1:
             oversell_pro_status, io_some_avg10, mem_some_total, mem_sometotal_delta = self.oversell_psi_check()
             oversell_cache_ratio, avail_reclaim, immed_reclaim = self.get_meminfo_for_pagereport()
@@ -429,9 +420,9 @@ class UMRD:
                 self.cgtree.set_proactive(self.cgtree.conf.proactive_low)
                 return LOW_UTIL
 
+        if io_some_avg10 is None:
+            io_some_avg10 = get_global_pressure_some_avg10('io')
 
-        # If global IO psi pressure is too high, stop reclaiming in this period.
-        io_some_avg10 = get_global_pressure_some_avg10('io')
         if io_some_avg10 >= 95:
             LOGGER.info('Global io pressure is too high (%s), skipping reclaim cycle.',
                          io_some_avg10)
